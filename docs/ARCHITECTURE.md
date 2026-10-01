@@ -384,6 +384,49 @@ The Queue is the **single entry point** for every packet. The NotificationCenter
 
 Queue admission reads GlobalState. When the platform is `BUSY`, only `CRITICAL` packets are admitted. `CRITICAL` packets go to the NotificationCenter synchronously. Other packets go in the next task.
 
+### 10.1 How the three centralized subsystems fit together (M3)
+
+Each is its own package (`@platform/global-state`, `@platform/queue`, `@platform/notification`) and exports a factory. The Queue and the NotificationCenter also return a piece that plugs into the kernel or into each other, so no package imports another:
+
+```ts
+const globalState = createGlobalState();
+const notification = createNotificationCenter({ events });
+const queue = createQueue({ fanOut: notification.fanOut });
+
+const kernel = new Kernel([globalState, queue.subsystem, notification.subsystem, ...featurized], {
+  router: queue.router, // every packet now enters through the Queue
+});
+```
+
+**GlobalState** (`global-state`)
+- Derives the platform status from every unit's lifecycle, which the kernel exposes to units as `ctx.statuses`. The status is `INITIALIZING` while any unit initializes, `DEGRADED` while any unit is `FAILED`, `DEGRADED` or waiting for a dependency, `BUSY` while any unit is `BUSY` or pending work exceeds a threshold, and `IDLE` otherwise.
+- Tracks pending work (`beginWork` / `endWork`). The Queue registers every in-flight packet, so the user-visible "work in progress" is always accurate (guarantee 3, §1).
+- Admission (`canAccept(importance)`): `CRITICAL` always; nothing else while `BUSY`; no `LOW` while `DEGRADED`.
+- Environment: online and visibility, observable.
+- Tab identity that survives reloads and is unique for duplicated tabs: an id kept in `sessionStorage`, confirmed with a `BroadcastChannel` probe. If another live tab answers with the same id (a duplicated tab copies `sessionStorage`), a new id is minted.
+
+**Queue** (`queue`), the kernel's packet router
+- The single entry point. It checks the send rule, then admission through GlobalState (when it runs), then a depth limit. Rejected packets fail with `QueueRejectedError`.
+- Holds packets in priority tiers, keeps packets with the same `orderingKey` in order, and runs a bounded number at once. `CRITICAL` packets dispatch at once; others in the next scheduler task.
+- 1-to-1: delivers through the kernel. A target that exists but is not running is retried with backoff (the backoff library moves to `@platform/core`). After the last retry, or when the TTL passes, the packet becomes a dead letter and the request rejects. A target's own error (its `receive` threw) goes straight back to the requester: it is not retried, because retrying could repeat side effects.
+- 1-to-N: hands the envelope to `fanOut` (the NotificationCenter), or to the kernel's direct broadcast when there is none.
+- Dead letters are kept in memory and written through a `LateBinding` that Storage binds in M6.
+- Records each settled packet's final fingerprint trail (`sent`, `enqueued`, `dispatched`, `delivered`, `completed` or `failed`).
+
+**NotificationCenter** (`notification`)
+- Routing only: the event registry, subscriptions, access control and history. No queue, no retries (A10).
+- Subscribers are subsystems that list the event in `subscribes`, plus programmatic subscriptions (for adapters and UI code).
+- Access control per event: which subsystems may publish it, and which may receive it.
+- A circuit breaker per subscriber stops calling one that keeps failing, and retries it after a timeout.
+- History: the last N broadcasts with one trail each, covering every delivery.
+- In-realm subscribers are on the same page and tab, so Page and Tab broadcasts reach them all. Window (M5) and Global (M8) relays plug in later.
+
+**Kernel additions**
+- `ctx.statuses`: every unit's lifecycle, read-only, for every unit.
+- Centralized subsystems boot before featurized ones, and may only require other centralized subsystems.
+- `kernel.subscribers(eventId)` lists the running subscribers of an event, and `kernel.deliver(envelope, { to, clone })` delivers a broadcast to one of them with its own copy.
+- `kernel.scopeOf(id)` returns a subsystem's scope, so routers can check the send rule for envelopes they did not build.
+
 ---
 
 ## 11. Scopes

@@ -1,3 +1,12 @@
+> **Amendments (M3, 2026-10-01).** These override the text below wherever they conflict. See [ARCHITECTURE §10.1](../docs/ARCHITECTURE.md#101-how-the-three-centralized-subsystems-fit-together-m3) and [§16](../docs/ARCHITECTURE.md#16-corrections-to-the-per-subsystem-proposals).
+>
+> - The Queue is the kernel's **packet router**: every packet, 1-to-1 and 1-to-N, enters through it.
+> - The Notification Center does **not** poll the Queue. The Queue pushes broadcasts to it through `fanOut`.
+> - Admission reads Global State (`canAccept(importance)`) when it is running.
+> - Only delivery failures are retried (the target is not running). A target's own error goes back to the requester unretried.
+> - Dead letters are kept in memory and written through a `LateBinding`, which Storage binds from M6.
+> - `navigator.locks` and `MessageChannel` move to transports (`@platform/core`); the in-realm Queue does not need them.
+
 # Message Queue Manager
 - Use the `navigator.locks` API for locking requests to the queue
 - The main design is the aws sqs model

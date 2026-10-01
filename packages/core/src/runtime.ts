@@ -1,15 +1,36 @@
 /**
  * @fileoverview
- * @summary Runs one unit: its lifecycle, context, features and teardown.
+ * @summary Runs one unit: its lifecycle, context, processors, features and teardown.
  * @description
- * Internal to the kernel. One {@linkcode UnitRuntime} exists per subsystem
- * and per feature. It implements the lifecycle rules of
+ * Internal to the kernel; only {@linkcode StatePersistence} is public (it is
+ * re-exported from `kernel.ts`). One {@linkcode UnitRuntime} exists per
+ * subsystem and per feature. It implements the lifecycle rules of
  * docs/ARCHITECTURE.md §3 and §4:
  *
- * - `init`, then the features, then `control`. Any throw fails the unit.
- * - A feature that fails leaves its parent `DEGRADED`, never `FAILED`.
- * - Teardown runs disposers in reverse, aborts the unit's signal, and
- *   stops its features.
+ * ```text
+ *   start():  INITIALIZING --> restore persisted state (first start only)
+ *                          --> start processors
+ *                          --> init(ctx)            (may return a disposer)
+ *                          --> start features       (a failing feature does not fail the parent)
+ *                          --> control(ctx)
+ *                          --> READY, or DEGRADED when a feature is off
+ *             any throw    --> teardown --> FAILED
+ *
+ *   teardown: halt features (reverse) --> disposers (reverse)
+ *             --> stop processors (reverse) --> abort ctx.signal
+ *   ```
+ *
+ * @example
+ * Persisting unit state to localStorage
+ * ```ts
+ * import { Kernel, type StatePersistence } from '@platform/core';
+ *
+ * const persistence: StatePersistence = {
+ *   load: (id) => JSON.parse(localStorage.getItem(`unit:${id}`) ?? 'null') ?? undefined,
+ *   save: (id, state) => localStorage.setItem(`unit:${id}`, JSON.stringify(state)),
+ * };
+ * const kernel = new Kernel(subsystems, { persistence });
+ * ```
  *
  * @author MathAid
  */
@@ -28,15 +49,80 @@ import type {
 } from './unit';
 import type { Schedule } from './view';
 
-/** @summary Loads and saves units' persisted state (§5). */
+/**
+ * @summary Loads and saves units' persisted state (ARCHITECTURE §5).
+ *
+ * @description
+ * `load` returns a unit's {@linkcode PersistedState} (or `undefined`) and is
+ * called once, before the unit's first start. `save` receives the state when
+ * the unit is destroyed. Both may be asynchronous. Only keys marked
+ * `persisted` are ever saved or restored, and only from a matching schema
+ * version.
+ *
+ * Pass one to the kernel as `persistence`. Until the Storage subsystem is
+ * ported (M6), a simple adapter over `localStorage` or IndexedDB will do.
+ *
+ * @example
+ * Example 1: localStorage
+ * ```ts
+ * const persistence: StatePersistence = {
+ *   load: (id) => JSON.parse(localStorage.getItem(`unit:${id}`) ?? 'null') ?? undefined,
+ *   save: (id, state) => localStorage.setItem(`unit:${id}`, JSON.stringify(state)),
+ * };
+ * ```
+ *
+ * @example
+ * Example 2: In memory, for tests
+ * ```ts
+ * import { createMemoryPersistence } from '@platform/core/testing';
+ * const persistence = createMemoryPersistence({ prefs: { version: 1, data: { theme: 'dark' } } });
+ * ```
+ *
+ * @public
+ */
 export interface StatePersistence {
+  /**
+   * @summary Returns a unit's persisted state.
+   * @param {string} unitId The unit's full id.
+   * @returns The persisted state, or `undefined` when there is none.
+   */
   load(
     unitId: string,
   ): PersistedState<object> | undefined | Promise<PersistedState<object> | undefined>;
+  /**
+   * @summary Saves a unit's persisted state.
+   * @param {string} unitId The unit's full id.
+   * @param {PersistedState<object>} state The persisted keys and their schema version.
+   */
   save(unitId: string, state: PersistedState<object>): void | Promise<void>;
 }
 
-/** @summary What a runtime needs from the kernel. */
+/**
+ * @summary What a {@linkcode UnitRuntime} needs from the kernel.
+ *
+ * @description
+ * Dependency checks (`unmet`), lookups (`runtime`), change notification
+ * (`changed`, which can ask for dependency reconciliation), error reporting
+ * (`reportError`), packet ports (`port`), and the shared options for
+ * persistence, processors and view scheduling.
+ *
+ * @example
+ * Example 1: The kernel implements it
+ * ```ts
+ * const host: RuntimeHost = { unmet, runtime, changed, reportError, port, persistence };
+ * ```
+ *
+ * @example
+ * Example 2: A minimal host for a runtime test
+ * ```ts
+ * const host: RuntimeHost = {
+ *   unmet: () => [], runtime: () => undefined, changed: () => {},
+ *   reportError: console.error, port: () => fakePort,
+ * };
+ * ```
+ *
+ * @internal
+ */
 export interface RuntimeHost {
   /** Required dependencies (and the parent, for features) that are not met. */
   unmet(runtime: UnitRuntime): string[];
@@ -48,20 +134,59 @@ export interface RuntimeHost {
   reportError(error: unknown, unitId: string): void;
   /** The packet port for this runtime. */
   port(runtime: UnitRuntime): PacketPort;
+  /** Loads and saves persisted state. */
   readonly persistence?: StatePersistence;
   /** Scheduler, worker budget and slice budget shared by every processor. */
   readonly processors?: ProcessorRunnerOptions;
+  /** View notification scheduling. */
   readonly schedule?: Schedule;
 }
 
+/**
+ * @summary Turns a thrown value into a lifecycle reason.
+ * @internal
+ */
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** @summary The live instance of one unit definition. */
+/**
+ * @summary The live instance of one unit definition.
+ *
+ * @description
+ * Owns the unit's {@linkcode Lifecycle}, {@linkcode StateCell}, processor
+ * runners, feature runtimes, disposers and context, and implements every
+ * lifecycle operation: `start` (or restart), `fail`, `halt`, `busy`,
+ * `suspend`, `resume`, `refresh` and `destroy`. None of them throw: failures
+ * end in `FAILED` and are reported to the host.
+ *
+ * The kernel creates one per subsystem (with `parent: null`) and one per
+ * feature, and is its only caller. Applications see it through
+ * `kernel.unit(id)`.
+ *
+ * @example
+ * Example 1: How the kernel builds runtimes
+ * ```ts
+ * const runtime = new UnitRuntime(definition, null, host);
+ * runtime.features; // one runtime per feature, built recursively
+ * ```
+ *
+ * @example
+ * Example 2: Starting and destroying
+ * ```ts
+ * await runtime.start();   // READY, DEGRADED, FAILED, or still waiting
+ * await runtime.destroy(); // DESTROYED, persisted state saved
+ * ```
+ *
+ * @internal
+ */
 export class UnitRuntime {
+  /** The full id: `subsystem` or `subsystem/feature`. */
   readonly id: string;
+  /** The unit's lifecycle. */
   readonly lifecycle: Lifecycle;
+  /** The unit's state. Kept across restarts. */
   readonly state: StateCell<object>;
+  /** One runtime per feature, in declaration order. */
   readonly features: readonly UnitRuntime[];
 
   #control: ControlInterface | undefined;
@@ -72,6 +197,12 @@ export class UnitRuntime {
   #suspendedForDependencies = false;
   #initialized = false;
 
+  /**
+   * @param {UnitDefinition} definition The unit's definition.
+   * @param {UnitRuntime | null} parent The parent runtime, or `null` for a subsystem.
+   * @param {RuntimeHost} host The kernel.
+   * @throws {Error} For an empty id, an id containing `/`, an invalid processor definition, or duplicate processor ids.
+   */
   constructor(
     readonly definition: UnitDefinition,
     readonly parent: UnitRuntime | null,
@@ -95,47 +226,76 @@ export class UnitRuntime {
     }
   }
 
-  /** @summary The subsystem this unit belongs to (itself, for a subsystem). */
+  /**
+   * @summary The subsystem this unit belongs to (itself, for a subsystem).
+   * @returns {UnitRuntime} The root runtime.
+   */
   get root(): UnitRuntime {
     return this.parent ? this.parent.root : this;
   }
 
+  /**
+   * @summary The current status.
+   * @returns {UnitStatus} The lifecycle's status.
+   */
   get status(): UnitStatus {
     return this.lifecycle.status;
   }
 
+  /**
+   * @summary The current lifecycle snapshot.
+   * @returns {LifecycleSnapshot} The snapshot.
+   */
   get snapshot(): LifecycleSnapshot {
     return this.lifecycle.view.getSnapshot();
   }
 
-  /** @summary True in `READY`, `BUSY` and `DEGRADED`. */
+  /**
+   * @summary Tells whether the unit is running (`READY`, `BUSY` or `DEGRADED`).
+   * @returns {boolean} `true` while running.
+   */
   get running(): boolean {
     return RUNNING_STATUSES.has(this.status);
   }
 
-  /** @summary The control interface while running, otherwise `undefined`. */
+  /**
+   * @summary The control interface while running.
+   * @returns {ControlInterface | undefined} The control interface, or `undefined` when not running.
+   */
   get control(): ControlInterface | undefined {
     return this.running ? this.#control : undefined;
   }
 
-  /** @summary The context while initialized, otherwise `null`. */
+  /**
+   * @summary The context while initialized.
+   * @returns {UnitContext<object> | null} The context, or `null` before start and after teardown.
+   */
   get context(): UnitContext<object> | null {
     return this.#context;
   }
 
-  /** @summary True when the kernel suspended this unit because a dependency stopped. */
+  /**
+   * @summary Tells whether the kernel suspended this unit because a dependency stopped.
+   * @returns {boolean} `true` when the suspension should end once the dependency runs again.
+   */
   get suspendedForDependencies(): boolean {
     return this.#suspendedForDependencies;
   }
 
-  /** @summary The subsystem definition. Only valid on a root runtime. */
+  /**
+   * @summary The subsystem definition this unit belongs to.
+   * @returns {SubsystemDefinition} The root's definition.
+   */
   get subsystem(): SubsystemDefinition {
     return this.root.definition as SubsystemDefinition;
   }
 
   /**
    * @summary Starts (or restarts, from `FAILED`) the unit when its dependencies are met.
-   * @description Never throws: a failing initializer leaves the unit `FAILED`.
+   * @description Records `waitingFor` when they are not. Never throws: a
+   * failing processor, initializer, or control factory leaves the unit
+   * `FAILED`, after a full teardown.
+   * @returns {Promise<void>} Resolves when the start attempt is over.
    */
   async start(): Promise<void> {
     if (this.status !== 'UNINITIALIZED' && this.status !== 'FAILED') return;
@@ -182,7 +342,12 @@ export class UnitRuntime {
   }
 
   /**
-   * @summary Fails the running unit (from `ctx.fail`). Ignored when it is not running or suspended.
+   * @summary Fails the unit at runtime (from `ctx.fail`).
+   * @description Ignored unless the unit is running or suspended. Tears it
+   * down, moves it to `FAILED`, reports the error, and lets the parent
+   * re-derive its status.
+   * @param {unknown} error What went wrong.
+   * @returns {Promise<void>} Resolves after teardown.
    */
   async fail(error: unknown): Promise<void> {
     if (!this.running && this.status !== 'SUSPENDED') return;
@@ -192,14 +357,21 @@ export class UnitRuntime {
     this.parent?.refresh();
   }
 
-  /** @summary Stops a running feature because its parent stopped. */
+  /**
+   * @summary Stops a running feature because its parent stopped.
+   * @param {string} reason The lifecycle reason.
+   * @returns {Promise<void>} Resolves after teardown.
+   */
   async halt(reason: string): Promise<void> {
     if (!this.running && this.status !== 'SUSPENDED') return;
     await this.#teardown();
     this.#transition('FAILED', { reason });
   }
 
-  /** @summary `READY` <-> `BUSY`. */
+  /**
+   * @summary Moves between `READY` and `BUSY`. Ignored in other statuses.
+   * @param {boolean} isBusy `true` for `BUSY`.
+   */
   busy(isBusy: boolean): void {
     if (isBusy && this.status === 'READY') this.#transition('BUSY');
     else if (!isBusy && this.status === 'BUSY') this.#settle(true);
@@ -207,8 +379,10 @@ export class UnitRuntime {
 
   /**
    * @summary Suspends the unit and its running features.
-   * @param {string} reason Why.
-   * @param {boolean} [byDependency] True when the kernel suspends it because a dependency stopped.
+   * @description A throwing `suspend` hook is reported, and the unit is suspended anyway.
+   * @param {string} reason The lifecycle reason.
+   * @param {boolean} [byDependency=false] `true` when the kernel suspends it because a dependency stopped.
+   * @returns {Promise<void>} Resolves once suspended.
    */
   async suspend(reason: string, byDependency = false): Promise<void> {
     if (!this.running) return;
@@ -222,7 +396,11 @@ export class UnitRuntime {
     this.#transition('SUSPENDED', { reason });
   }
 
-  /** @summary Resumes a suspended unit and its suspended features. */
+  /**
+   * @summary Resumes a suspended unit and its suspended features.
+   * @description A throwing `resume` hook fails the unit.
+   * @returns {Promise<void>} Resolves once resumed (or failed).
+   */
   async resume(): Promise<void> {
     if (this.status !== 'SUSPENDED') return;
     try {
@@ -236,12 +414,16 @@ export class UnitRuntime {
     this.#settle(true);
   }
 
-  /** @summary Re-derives `READY` / `DEGRADED` after a feature changed. */
+  /** @summary Re-derives `READY` or `DEGRADED` after a feature changed. Ignored unless running. */
   refresh(): void {
     if (this.running) this.#settle();
   }
 
-  /** @summary Destroys the unit and its features, runs disposers, and saves persisted state. */
+  /**
+   * @summary Destroys the unit and its features, runs disposers, and saves persisted state.
+   * @description A throwing disposer or `save` is reported; destruction always completes.
+   * @returns {Promise<void>} Resolves once `DESTROYED`.
+   */
   async destroy(): Promise<void> {
     if (this.status === 'DESTROYING' || this.status === 'DESTROYED') return;
     this.#transition('DESTROYING');
@@ -257,7 +439,11 @@ export class UnitRuntime {
     this.#transition('DESTROYED');
   }
 
-  /** Moves to READY or DEGRADED from the current running or suspended status. */
+  /**
+   * @summary Moves to `READY` or `DEGRADED` from the current running or suspended status.
+   * @param {boolean} [leaveBusy=false] `true` to leave `BUSY` even when no feature is off.
+   * @internal
+   */
   #settle(leaveBusy = false): void {
     const off = this.features.filter((f) => !f.running).map((f) => f.definition.id);
     const status = this.status;
@@ -272,6 +458,10 @@ export class UnitRuntime {
     }
   }
 
+  /**
+   * @summary Halts features, runs disposers, stops processors and aborts the signal, in that order.
+   * @internal
+   */
   async #teardown(): Promise<void> {
     for (const feature of [...this.features].reverse()) {
       await feature.halt(`Parent ${this.id} stopped.`);
@@ -299,6 +489,10 @@ export class UnitRuntime {
     this.#suspendedForDependencies = false;
   }
 
+  /**
+   * @summary Transitions the lifecycle and asks the kernel to reconcile.
+   * @internal
+   */
   #transition(
     to: UnitStatus,
     details?: { reason?: string | null; offFeatures?: readonly string[] },
@@ -307,6 +501,10 @@ export class UnitRuntime {
     this.host.changed(this, true);
   }
 
+  /**
+   * @summary Builds the {@linkcode UnitContext} for one start.
+   * @internal
+   */
   #createContext(signal: AbortSignal): UnitContext<object> {
     const declared = new Set((this.definition.requires ?? []).map((d) => d.target));
     return {

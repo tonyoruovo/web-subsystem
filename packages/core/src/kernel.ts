@@ -36,6 +36,7 @@ import {
 } from './packet';
 import { UnitRuntime, type RuntimeHost, type StatePersistence } from './runtime';
 import { assertSendAllowed } from './scope';
+import type { ProcessorRunnerOptions } from './supervisor';
 import type { ControlInterface, PacketPort, SubsystemDefinition, UnitDefinition } from './unit';
 import { createStore, type Schedule, type View } from './view';
 
@@ -81,6 +82,8 @@ export interface KernelOptions {
   readonly now?: () => number;
   /** View notification scheduling. Defaults to `queueMicrotask`. */
   readonly schedule?: Schedule;
+  /** Scheduler, worker budget and slice budget for processors (§8). */
+  readonly processors?: ProcessorRunnerOptions;
 }
 
 /** @summary A handle on one unit, for its owner and for the platform. */
@@ -144,6 +147,7 @@ export class Kernel {
       port: (runtime) => this.#port(runtime),
       persistence: options.persistence,
       schedule: options.schedule,
+      processors: options.processors,
     };
 
     const nodes: DependencyNode[] = [];

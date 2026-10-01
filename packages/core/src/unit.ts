@@ -26,8 +26,10 @@
 
 import type { Dependency } from './dependency';
 import type { OutgoingPacket, Packet } from './packet';
+import type { ProcessorDef } from './processor';
 import type { Scope } from './scope';
 import type { StateCell, StateDefinition } from './state';
+import type { ProcessorHandle } from './supervisor';
 import type { View } from './view';
 
 /** @summary The "off" switch returned by an initializer (§3.2). */
@@ -84,6 +86,11 @@ export interface UnitContext<S> {
    * feature leaves its parent `DEGRADED` (§3.1).
    */
   fail(error: unknown): void;
+  /**
+   * @summary One of this unit's processors (§8).
+   * @throws {Error} For an id the unit does not declare.
+   */
+  processor<In = unknown, Out = unknown>(id: string): ProcessorHandle<In, Out>;
 }
 
 /** @summary A unit: a subsystem or a feature. */
@@ -103,6 +110,9 @@ export interface UnitDefinition<
   suspend?(ctx: UnitContext<S>): void | Promise<void>;
   /** Resume work after `suspend`. */
   resume?(ctx: UnitContext<S>): void | Promise<void>;
+  /** Work done off (or on) the main thread (§8). Started before `init`. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly processors?: readonly ProcessorDef<any, any>[];
   /** Child units (§3.1). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly features?: readonly UnitDefinition<any, any>[];

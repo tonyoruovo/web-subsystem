@@ -15,7 +15,9 @@
  */
 
 import { Lifecycle, RUNNING_STATUSES, type LifecycleSnapshot, type UnitStatus } from './lifecycle';
+import { validateProcessorDef } from './processor';
 import { createStateCell, type PersistedState, type StateCell } from './state';
+import { ProcessorRunner, type ProcessorRunnerOptions } from './supervisor';
 import type {
   ControlInterface,
   Disposer,
@@ -47,6 +49,8 @@ export interface RuntimeHost {
   /** The packet port for this runtime. */
   port(runtime: UnitRuntime): PacketPort;
   readonly persistence?: StatePersistence;
+  /** Scheduler, worker budget and slice budget shared by every processor. */
+  readonly processors?: ProcessorRunnerOptions;
   readonly schedule?: Schedule;
 }
 
@@ -61,6 +65,7 @@ export class UnitRuntime {
   readonly features: readonly UnitRuntime[];
 
   #control: ControlInterface | undefined;
+  #processors = new Map<string, ProcessorRunner>();
   #context: UnitContext<object> | null = null;
   #disposers: Disposer[] = [];
   #abort: AbortController | null = null;
@@ -81,6 +86,13 @@ export class UnitRuntime {
     this.lifecycle = new Lifecycle(this.id);
     this.state = createStateCell(this.id, definition.state, host.schedule);
     this.features = (definition.features ?? []).map((f) => new UnitRuntime(f, this, host));
+    const processorIds = (definition.processors ?? []).map((def) => {
+      validateProcessorDef(def);
+      return def.id;
+    });
+    if (new Set(processorIds).size !== processorIds.length) {
+      throw new Error(`[${this.id}] Processor ids must be unique.`);
+    }
   }
 
   /** @summary The subsystem this unit belongs to (itself, for a subsystem). */
@@ -148,6 +160,11 @@ export class UnitRuntime {
       if (!this.#initialized) {
         const persisted = await this.host.persistence?.load(this.id);
         if (persisted) this.state.restore(persisted);
+      }
+      for (const def of this.definition.processors ?? []) {
+        const runner = new ProcessorRunner(def, this.host.processors);
+        this.#processors.set(def.id, runner);
+        await runner.start();
       }
       const disposer = await this.definition.init?.(context);
       if (typeof disposer === 'function') this.#disposers.push(disposer);
@@ -267,6 +284,14 @@ export class UnitRuntime {
       }
     }
     this.#disposers = [];
+    for (const runner of [...this.#processors.values()].reverse()) {
+      try {
+        await runner.stop();
+      } catch (error) {
+        this.host.reportError(error, this.id);
+      }
+    }
+    this.#processors = new Map();
     this.#abort?.abort();
     this.#abort = null;
     this.#control = undefined;
@@ -305,6 +330,11 @@ export class UnitRuntime {
       },
       busy: (isBusy) => this.busy(isBusy),
       fail: (error) => void this.fail(error),
+      processor: <In, Out>(processorId: string) => {
+        const runner = this.#processors.get(processorId);
+        if (!runner) throw new Error(`[${this.id}] No processor "${processorId}".`);
+        return runner as unknown as ProcessorRunner<In, Out>;
+      },
     };
   }
 }

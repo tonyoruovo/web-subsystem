@@ -1,6 +1,6 @@
 {
   "name": "web-subsystem",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "A library for building web subsystems with TypeScript.",
   "type": "module",

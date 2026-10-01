@@ -1,4 +1,5 @@
 export * from './correlation';
+export * from './dependency';
 export * from './lifecycle';
 export * from './packet';
 export * from './scope';

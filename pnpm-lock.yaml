@@ -280,6 +280,18 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/queue:
+    devDependencies:
+      '@platform/core':
+        specifier: workspace:*
+        version: link:../core
+      '@platform/global-state':
+        specifier: workspace:*
+        version: link:../global-state
+      '@platform/notification':
+        specifier: workspace:*
+        version: link:../notification
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':

@@ -2,7 +2,7 @@
 
 > **Status:** Agreed — 2026-10-01
 > **Precedence:** [`proposals/README.md`](../proposals/README.md) > this document > the per-subsystem proposals in [`proposals/`](../proposals).
-> Where this document changes `proposals/README.md`, the change is listed in [§15 Amendments](#15-amendments-to-proposalsreadmemd) and must be merged into the README before it takes effect.
+> Where this document changes `proposals/README.md`, the change is listed in [§15 Amendments](#15-amendments-to-proposalsreadmemd). Amendments A1–A10 were merged into the README on 2026-10-01.
 
 ---
 

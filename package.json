@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:node": "vitest run --project node",
     "test:browser": "vitest run --project browser",
+    "check:browsers": "node scripts/check-browsers.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "docs": "typedoc"

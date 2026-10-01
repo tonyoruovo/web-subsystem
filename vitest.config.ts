@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'node:url';
 
 import { playwright } from '@vitest/browser-playwright';
-import { devices } from 'playwright';
 import { defineConfig } from 'vitest/config';
+
+import { contextOptionsFor, selectInstallations } from './playwright.config';
 
 const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) };
 
@@ -10,15 +11,17 @@ const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) };
 const BROWSER_TESTS = ['tests/**/*.browser.spec.ts', 'packages/*/test/**/*.browser.spec.ts'];
 
 /**
- * Supported platforms (docs/ARCHITECTURE.md §1.1): desktop engines, plus
- * emulated mobile WebKit (every iOS browser) and Chromium on Android.
- * Emulation uses the desktop engine with a mobile viewport, user agent and
- * touch; real-device runs are added before 1.0.
+ * One browser instance per installation in playwright.config.ts that exists
+ * on this machine. Select a subset with `BROWSERS=chrome,edge`.
  */
-const mobile = (device: keyof typeof devices) => {
-  const { defaultBrowserType: _engine, ...contextOptions } = devices[device];
-  return playwright({ contextOptions });
-};
+const instances = selectInstallations().map((installation) => ({
+  browser: installation.engine,
+  name: installation.id,
+  provider: playwright({
+    launchOptions: { executablePath: installation.executablePath },
+    contextOptions: contextOptionsFor(installation),
+  }),
+}));
 
 export default defineConfig({
   resolve: { alias },
@@ -42,13 +45,7 @@ export default defineConfig({
             enabled: true,
             headless: true,
             provider: playwright(),
-            instances: [
-              { browser: 'chromium' },
-              { browser: 'firefox' },
-              { browser: 'webkit' },
-              { browser: 'webkit', name: 'mobile-webkit', provider: mobile('iPhone 15') },
-              { browser: 'chromium', name: 'mobile-chromium', provider: mobile('Pixel 7') },
-            ],
+            instances,
           },
         },
       },

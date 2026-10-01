@@ -16,18 +16,19 @@ The kernel of the platform. Every other `@platform/*` package is built on it.
 
 ## What is in the package
 
-| Area                   | Exports                                                                                 | Design reference                                                |
-| ---------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Units and the kernel   | `defineSubsystem`, `defineUnit`, `Kernel`, `UnitHandle`, `UnitContext`                  | [ARCHITECTURE §3](../../docs/ARCHITECTURE.md#3-the-unit-model)  |
-| Lifecycle              | `Lifecycle`, `UnitStatus`, `TRANSITIONS`, `canTransition`                               | [§4](../../docs/ARCHITECTURE.md#4-lifecycle)                    |
-| State                  | `createStateCell`, `StateCell`, `StateDefinition`                                       | [§5](../../docs/ARCHITECTURE.md#5-state)                        |
-| Views                  | `View`, `createStore`, `deriveView`                                                     | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views)          |
-| Dependencies           | `DependencyGraph`, `LateBinding`, `Dependency`                                          | [§7](../../docs/ARCHITECTURE.md#7-dependencies)                 |
-| Processors and workers | `ProcessorDef`, `defineProcessor`, `ProcessorRunner`, `WorkerBudget`, `createScheduler` | [§8](../../docs/ARCHITECTURE.md#8-processors-and-workers)       |
-| Packets                | `Packet`, `PacketEnvelope`, `createEnvelope`, `CorrelationRegistry`                     | [§9](../../docs/ARCHITECTURE.md#9-packets)                      |
-| Transports             | `Transport`, `createChannelTransportPair`, `createInRealmTransportPair`, `RpcEndpoint`  | [§10](../../docs/ARCHITECTURE.md#10-messaging-topology)         |
-| Scopes and routes      | `Scope`, `reaches`, `assertSendAllowed`, `RouteSource`                                  | [§11](../../docs/ARCHITECTURE.md#11-scopes)                     |
-| Global wire protocol   | `encodeWire`, `decodeWire`, `WireEnvelopeSchema`                                        | [§11.4](../../docs/ARCHITECTURE.md#114-global-scope-the-server) |
+| Area                   | Exports                                                                                 | Design reference                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Units and the kernel   | `defineSubsystem`, `defineUnit`, `Kernel`, `UnitHandle`, `UnitContext`                  | [ARCHITECTURE §3](../../docs/ARCHITECTURE.md#3-the-unit-model)                               |
+| Lifecycle              | `Lifecycle`, `UnitStatus`, `TRANSITIONS`, `canTransition`                               | [§4](../../docs/ARCHITECTURE.md#4-lifecycle)                                                 |
+| State                  | `createStateCell`, `StateCell`, `StateDefinition`                                       | [§5](../../docs/ARCHITECTURE.md#5-state)                                                     |
+| Views                  | `View`, `createStore`, `deriveView`                                                     | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views)                                       |
+| Dependencies           | `DependencyGraph`, `LateBinding`, `Dependency`                                          | [§7](../../docs/ARCHITECTURE.md#7-dependencies)                                              |
+| Processors and workers | `ProcessorDef`, `defineProcessor`, `ProcessorRunner`, `WorkerBudget`, `createScheduler` | [§8](../../docs/ARCHITECTURE.md#8-processors-and-workers)                                    |
+| Packets                | `Packet`, `PacketEnvelope`, `createEnvelope`, `CorrelationRegistry`                     | [§9](../../docs/ARCHITECTURE.md#9-packets)                                                   |
+| Routing and retries    | `PacketRouter`, `directRouter`, `computeBackoff`, `BackoffStrategy`                     | [§10.1](../../docs/ARCHITECTURE.md#101-how-the-three-centralized-subsystems-fit-together-m3) |
+| Transports             | `Transport`, `createChannelTransportPair`, `createInRealmTransportPair`, `RpcEndpoint`  | [§10](../../docs/ARCHITECTURE.md#10-messaging-topology)                                      |
+| Scopes and routes      | `Scope`, `reaches`, `assertSendAllowed`, `RouteSource`                                  | [§11](../../docs/ARCHITECTURE.md#11-scopes)                                                  |
+| Global wire protocol   | `encodeWire`, `decodeWire`, `WireEnvelopeSchema`                                        | [§11.4](../../docs/ARCHITECTURE.md#114-global-scope-the-server)                              |
 
 ## Installation
 
@@ -148,7 +149,7 @@ handle.lifecycle.subscribe(() => {
 });
 ```
 
-`kernel.statuses` holds every unit's snapshot in one view.
+`kernel.statuses` holds every unit's snapshot in one view. Units read the same view as `ctx.statuses` (Global State derives the platform status from it).
 
 ### Dependencies
 
@@ -217,7 +218,31 @@ defineSubsystem({
 });
 ```
 
-The kernel fills in ids, source, scope, timestamps and trace ids, and stamps `sent` and `delivered` fingerprints. Pass `causedBy: packet.header` to continue a trace. A broadcast may not leave its sender's scope. Until the Queue arrives (M3), packets are delivered by the kernel's direct in-realm router.
+The kernel fills in ids, source, scope, timestamps and trace ids, and stamps `sent` and `delivered` fingerprints. Pass `causedBy: packet.header` to continue a trace. A broadcast may not leave its sender's scope.
+
+### Routers
+
+Every packet a port produces goes through the kernel's **router**, a `PacketRouter` with one method, `route(envelope, expectReply)`. The default, `directRouter`, hands requests to `kernel.deliver` and broadcasts to `kernel.broadcast`, in the same realm, at once. In an application the Queue (`@platform/queue`) replaces it, adding admission, priorities, ordering, retries and dead letters:
+
+```ts
+const queue = createQueue({ fanOut: notification.fanOut });
+const kernel = new Kernel([queue.subsystem, notification.subsystem, ...subsystems], {
+  router: queue.router,
+});
+```
+
+A router builds on these kernel methods:
+
+| Method                                         | Does                                                                                                                                                                             |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deliver(envelope, { to?, clone?, onTrail? })` | Delivers to `metadata.target` (or `to`), stamps `delivered`, resolves with the reply. `onTrail` receives the final trail. Throws `UnitUnavailableError` or `PacketExpiredError`. |
+| `broadcast(envelope)`                          | Delivers a copy to every running subscriber except the sender.                                                                                                                   |
+| `subscribers(eventId)`                         | The running subsystems that receive an event.                                                                                                                                    |
+| `scopeOf(id)`                                  | A subsystem's scope, to check the send rule.                                                                                                                                     |
+
+`computeBackoff({ base, attempts, strategy })` computes retry waits (`exponential`, `exponential-jitter`, `decorrelated-jitter`, `linear`, `multiplicative-exponential`).
+
+**Centralized** subsystems (`kind: 'centralized'`: Global State, the Queue, the Notification Center) boot before every featurized one, and only the platform destroys them.
 
 ### Processors and workers
 

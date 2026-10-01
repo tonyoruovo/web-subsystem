@@ -1,6 +1,6 @@
 # @platform
 
-> **Status: pre-alpha (`0.0.2`).** The architecture is agreed. The kernel and its worker runtime (`@platform/core`, milestones M1 and M2) are built. The subsystems are not yet ported onto it. Nothing here is ready for production use, and every API shown below may change.
+> **Status: pre-alpha (`0.0.2`).** The architecture is agreed. The kernel and its worker runtime (`@platform/core`, M1 and M2) and the three centralized subsystems (`@platform/global-state`, `@platform/queue`, `@platform/notification`, M3) are built. The other subsystems are not yet ported onto the kernel. Nothing here is ready for production use, and every API shown below may change.
 >
 > `@platform` is a **placeholder name** until milestone M9, when the final name is chosen.
 
@@ -139,7 +139,7 @@ pnpm check:browsers
 
 Run a subset with `BROWSERS=chrome,edge pnpm test:browser`.
 
-> **CI is deferred.** A GitHub Actions workflow exists in `.github/workflows/ci.yml`, but the repository has no GitHub remote yet. Until then, run `pnpm check` locally.
+> **CI is deferred.** A GitHub Actions workflow exists in `.github/workflows/ci.yml` but is not enabled yet. Until then, run `pnpm check` locally.
 
 ## Roadmap
 

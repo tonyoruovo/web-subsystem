@@ -1,6 +1,6 @@
 # @platform
 
-> **Status: pre-alpha (`0.0.2`).** The architecture is agreed and the kernel (`@platform/core`, milestone M1) is built. The subsystems are not yet ported onto it. Nothing here is ready for production use, and every API shown below may change.
+> **Status: pre-alpha (`0.0.2`).** The architecture is agreed. The kernel and its worker runtime (`@platform/core`, milestones M1 and M2) are built. The subsystems are not yet ported onto it. Nothing here is ready for production use, and every API shown below may change.
 >
 > `@platform` is a **placeholder name** until milestone M9, when the final name is chosen.
 

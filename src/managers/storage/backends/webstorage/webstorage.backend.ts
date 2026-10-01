@@ -556,7 +556,7 @@ export abstract class WebStorageBackend implements IStorageBackend<string> {
   async count(prefix?: string): Promise<number> {
     this._assertInitialized();
     let n = 0;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     for (const _ of this._ownKeys(prefix)) n++;
     return n;
   }

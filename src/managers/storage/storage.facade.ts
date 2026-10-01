@@ -296,7 +296,7 @@ export class StorageFacade {
     for (const { key, envelope } of raw) {
       try {
         const value = await this.decode(envelope, schema);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const { payload: _payload, ...meta } = envelope;
         results.push({ key, value, envelope: meta });
       } catch (error) {

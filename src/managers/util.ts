@@ -24,4 +24,5 @@ export async function tryRun<F extends FunctionLike<never[]>>(
 export async function runCleanup(cb: ICleanUp, a: unknown) {
   if (typeof cb === 'function') return await cb(a);
   else if (typeof cb === 'object') return (await (cb as Promise<ICleanUpRecord>)).cleanup(a);
+  return undefined;
 }

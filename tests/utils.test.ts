@@ -407,8 +407,7 @@ describe('debounce()', () => {
       const d = debounce(search, 300);
 
       // Simulate typing "hello" char by char at 50ms intervals
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ['h', 'he', 'hel', 'hell', 'hello'].forEach((q, i) => {
+      ['h', 'he', 'hel', 'hell', 'hello'].forEach((q) => {
         vi.advanceTimersByTime(50);
         d(q);
       });

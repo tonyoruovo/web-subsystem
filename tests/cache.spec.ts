@@ -9,13 +9,6 @@ import { CacheBackend, type CanonicalKey, type StorageEnvelope } from '../src';
 // Mock the caches API
 // ───────────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function createFakeResponse(body: string, headers?: Record<string, string>): Response {
-  return new Response(body, {
-    headers: new Headers(headers ?? { 'Content-Type': 'application/json' }),
-  });
-}
-
 let fakeCache: Map<string, { response: Response; url: string }>;
 
 function createMockCache(): Cache {

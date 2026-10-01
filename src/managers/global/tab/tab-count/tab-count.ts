@@ -53,14 +53,12 @@ export function useTabCount(tab: TabOperative) {
     // pagehide fires reliably before the page is torn down (unlike beforeunload)
     // and also covers BFCache navigation (back/forward).
     // pageshow fires when the page is restored from BFCache.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    function onPageShow(e: PageTransitionEvent) {
+    function onPageShow(_e: PageTransitionEvent) {
       // e.persisted = true means page was restored from BFCache
       void tabShow();
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    function onPageHide(e: PageTransitionEvent) {
+    function onPageHide(_e: PageTransitionEvent) {
       void tabHide();
     }
 

@@ -340,10 +340,10 @@ describe('OPFSBackend – stress', () => {
 
     const rootDir = {
       kind: 'directory',
-      async getFileHandle(name: string, opts?: { create?: boolean }) {
+      async getFileHandle(name: string, _opts?: { create?: boolean }) {
         return { _filePath: name, kind: 'file' };
       },
-      async getDirectoryHandle(name: string, opts?: { create?: boolean }) {
+      async getDirectoryHandle(_name: string, _opts?: { create?: boolean }) {
         return { kind: 'directory' };
       },
       async removeEntry() {},
@@ -491,7 +491,6 @@ describe('Abuse & edge cases – shared patterns', () => {
     // Not expired yet
     expect(await backend.read(key)).not.toBeNull();
     // Travel forward in time by mocking Date.now
-    const originalNow = Date.now;
     vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 200);
     expect(await backend.read(key)).toBeNull();
     vi.restoreAllMocks();

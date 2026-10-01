@@ -20,9 +20,10 @@
  * @author MathAid
  */
 
-import { CryptoManager } from './crypto.manager';
 import { compress as gzip, decompress as gunzip } from '../compression';
 import type { StorageCodec } from '../storage/storage.facade';
+
+import type { CryptoManager } from './crypto.manager';
 
 /**
  * @summary Builds a Storage codec backed by a CryptoManager.

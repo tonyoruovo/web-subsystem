@@ -3,8 +3,8 @@
 import { isNil, pick } from 'lodash';
 
 import type { ITabCountError, ITabCountRequest, ITabCountResponse } from '../tab.types';
-
 import { TabCountTransactionType } from '../tab.types';
+
 import { clientIsSameOriginWithWorker } from '@/libs';
 
 /*************************************************************************************

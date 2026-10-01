@@ -20,6 +20,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { CanonicalKey, StorageEnvelope, WebStorageTransaction } from '../src';
 import { LocalStorageBackend, SessionStorageBackend } from '../src';
 
@@ -129,7 +130,7 @@ function sharedSuite(
         expect(result.available).toBe(true);
         expect(result.latency).toBeGreaterThanOrEqual(0);
         // probe key must be cleaned up
-        expect(mockStorage.getItem(`__storage____probe__`)).toBeNull();
+        expect(mockStorage.getItem('__storage____probe__')).toBeNull();
       });
 
       it('probe() returns available:false when setItem throws', async () => {

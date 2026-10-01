@@ -1,7 +1,7 @@
+import { runCleanup } from '../../../util';
 import type { GlobalStore } from '../../global.store';
 import type { TabOperative } from '../tab.types';
 
-import { runCleanup } from '../../../util';
 import {
   useBroadcastStrategy,
   useSequentialStrategy,

@@ -66,6 +66,7 @@ import type {
   TransactionStrength,
 } from '../../storage.types';
 import { buildCanonicalKey, buildModulePrefix, parseCanonicalKey } from '../../storage.util';
+
 import type { CacheBufferedOp, ICacheTransaction } from './cache.types';
 
 /**
@@ -408,7 +409,7 @@ export class CacheTransaction implements ICacheTransaction {
     if (this._settled) {
       throw new Error(
         `[CacheTransaction:${this.id}] Transaction is already settled. ` +
-          `Create a new transaction for further operations.`,
+          'Create a new transaction for further operations.',
       );
     }
   }

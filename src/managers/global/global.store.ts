@@ -1,6 +1,6 @@
 import { PlatformManagerExecutionState } from '../manager.dto';
-
 import type { IPlatformManagerError } from '../manager.dto';
+
 import type { ISupport } from './global.types';
 
 /**

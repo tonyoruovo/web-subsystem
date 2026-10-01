@@ -90,7 +90,7 @@ function parseISOString(input: string, allowWeeks: boolean = true): DurationReco
   );
 
   if (!allowWeeks && rawWeeks != null) {
-    throw new Error(`Weeks designator "W" is not valid in RFC 3339 duration strings.`);
+    throw new Error('Weeks designator "W" is not valid in RFC 3339 duration strings.');
   }
 
   const record: DurationRecord = {

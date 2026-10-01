@@ -1,4 +1,3 @@
-import { sizeOf } from '@/libs';
 import type {
   CanonicalKey,
   CapabilityResult,
@@ -11,9 +10,11 @@ import type {
   TransactionStrength,
   WriteOptions,
 } from '../../storage.types';
-import { useMemoryStore, type MemoryStore } from './memory.store';
 
+import { useMemoryStore, type MemoryStore } from './memory.store';
 import { MemoryTransaction, type BufferedOp } from './memory.transaction';
+
+import { sizeOf } from '@/libs';
 
 /**
  * Memory backend

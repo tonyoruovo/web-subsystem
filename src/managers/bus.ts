@@ -25,10 +25,10 @@
  */
 
 import { GlobalState } from './global/global-state.manager';
-import { MessageQueue } from './queue/queue.manager';
-import { NotificationCenter } from './notification/notification.manager';
 import { NotificationBridge, type BroadcastChannelLike } from './notification/notification.bridge';
+import { NotificationCenter } from './notification/notification.manager';
 import type { QueueConfiguration } from './queue/queue.dto';
+import { MessageQueue } from './queue/queue.manager';
 
 /**
  * @summary Options for {@linkcode createBus}.

@@ -113,6 +113,7 @@ import type {
   TransactionStrength,
   WriteOptions,
 } from '../../storage.types';
+
 import { WebStorageTransaction } from './webstorage.transaction';
 import type {
   IWebStorageTransaction,
@@ -589,7 +590,7 @@ export abstract class WebStorageBackend implements IStorageBackend<string> {
     if (strength === 'serializable') {
       throw new Error(
         `[${this.kind}] "serializable" transactions are not supported. ` +
-          `Web Storage provides "compensating" strength. Use IndexedDB for serializable transactions.`,
+          'Web Storage provides "compensating" strength. Use IndexedDB for serializable transactions.',
       );
     }
 

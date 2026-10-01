@@ -23,7 +23,7 @@
  */
 
 import type { EventMetadata } from './notification.dto';
-import { NotificationCenter } from './notification.manager';
+import type { NotificationCenter } from './notification.manager';
 
 /**
  * @summary The minimal BroadcastChannel surface the bridge needs.

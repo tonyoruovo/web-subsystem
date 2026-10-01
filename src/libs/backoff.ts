@@ -22,9 +22,10 @@
 import { isNil } from 'lodash';
 
 import { computeClamp, generateSecureRandom } from './utils';
-import type { BackoffParams, RetryConfig } from '@/types/backoff.type';
-import { BackoffStrategy } from '@/enums/backoff.enum';
+
 import { RETRY_CONFIG_DEFAULTS } from '@/constants/backoff.const';
+import { BackoffStrategy } from '@/enums/backoff.enum';
+import type { BackoffParams, RetryConfig } from '@/types/backoff.type';
 
 /** A default retry multiplier value */
 const RETRY_MULTIPLIER = 1.5;

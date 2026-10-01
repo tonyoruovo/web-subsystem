@@ -5,6 +5,7 @@
  * Covers: CRUD, manifest, WAL commit, WAL replay, eviction, quota, transactions.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type {
   CanonicalKey,
   IFileIOAdapter,

@@ -69,7 +69,7 @@ export class MemoryTransaction<TRaw> implements ITransaction {
       this._onCommit(this.id, this._ops);
     } catch (cause) {
       await this.rollback();
-      throw new ReferenceError(`An op threw. Rollback was applied: ${cause}`);
+      throw new ReferenceError(`An op threw. Rollback was applied: ${cause}`, { cause });
     }
   }
 
@@ -157,7 +157,7 @@ export class MemoryTransaction<TRaw> implements ITransaction {
           }
         } else if (typeof token === 'function') {
           for (let i = 0; i < this._ops.length; i++) {
-            if (!!token(this._ops[i])) {
+            if (token(this._ops[i])) {
               indicesToRemove.push(i);
             }
           }

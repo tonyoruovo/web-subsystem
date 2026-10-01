@@ -306,7 +306,7 @@ export function openDatabase(dbName: string, storeName: string): Promise<IDBData
       // The request will eventually succeed when the other tab closes or reloads.
       console.warn(
         `[IDBBackend] indexedDB.open("${dbName}") is blocked by an open connection ` +
-          `in another tab. Waiting for it to close.`,
+          'in another tab. Waiting for it to close.',
       );
     };
   });

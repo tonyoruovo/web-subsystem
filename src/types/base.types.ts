@@ -1,5 +1,6 @@
-import type { NilEntries } from '@/modules/util.dto';
 import type { DateLike } from './utils.type';
+
+import type { NilEntries } from '@/modules/util.dto';
 
 /**
  * An entity that represents an identity with an ID.

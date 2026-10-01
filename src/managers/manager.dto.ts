@@ -1,6 +1,5 @@
-import type { FunctionLike } from '@/modules';
-
 import { GLOBAL_ERROR_EVENT } from '@/constants';
+import type { FunctionLike } from '@/modules';
 
 export enum PlatformManagerExecutionState {
   IDLE = 0,

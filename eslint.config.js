@@ -1,5 +1,5 @@
 import eslint from '@eslint/js';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -13,7 +13,7 @@ export default tseslint.config(
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js'],
     plugins: {
-      import: importPlugin,
+      'import-x': importPlugin,
     },
     rules: {
       // Style rules that follow Standard JS
@@ -36,7 +36,7 @@ export default tseslint.config(
       ],
 
       // Enforce strict import ordering
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],

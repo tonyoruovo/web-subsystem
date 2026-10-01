@@ -11,13 +11,6 @@ import type {
   TransactionStrength,
   WriteOptions,
 } from '../../storage.types';
-import type {
-  IIOAdapterFactory,
-  Manifest,
-  ManifestEntry,
-  OPFSBackendConfig,
-  WALOp,
-} from './opfs.types';
 
 import {
   AsyncIOAdapterFactory,
@@ -26,6 +19,14 @@ import {
   detectIOAdapterFactory,
   encodeString,
 } from './opfs.io';
+import { OPFSTransaction } from './opfs.transaction';
+import type {
+  IIOAdapterFactory,
+  Manifest,
+  ManifestEntry,
+  OPFSBackendConfig,
+  WALOp,
+} from './opfs.types';
 import {
   base64ToBytes,
   bytesToBase64,
@@ -38,7 +39,6 @@ import {
   writeManifest,
   writeWAL,
 } from './opfs.utils';
-import { OPFSTransaction } from './opfs.transaction';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OPFSBackend
@@ -868,6 +868,7 @@ export class OPFSBackend implements IStorageBackend<string> {
       throw new Error(
         `[OPFSBackend] Transaction ${txId} failed mid-commit. ` +
           `WAL preserved for crash recovery. Cause: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
       );
     } finally {
       this._transactions.delete(txId);

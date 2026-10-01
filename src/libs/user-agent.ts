@@ -1,5 +1,4 @@
 import { UserAgentKind } from '@/enums/user-agent.enum';
-
 import type { IBrowserInfo, BrowserName, RenderingEngine } from '@/types/user-agent.types';
 
 /* ─── Main (async) entry point ───────────────────────── */
@@ -75,7 +74,7 @@ function detectFromUA(ua: string): IBrowserInfo {
 
   // 5. Opera (legacy Presto engine)
   if (/Opera\/|Opera\s/.test(ua))
-    return build('Opera', ver(/Opera[\/\s]([\d.]+)/), 'Presto', ua, UserAgentKind.OPERA);
+    return build('Opera', ver(/Opera[/\s]([\d.]+)/), 'Presto', ua, UserAgentKind.OPERA);
 
   // 6. Samsung Internet - must precede Chrome
   if (/SamsungBrowser\//.test(ua))

@@ -3,6 +3,7 @@
  * The browser `caches` API is mocked using vi.stubGlobal.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { CacheBackend, type CanonicalKey, type StorageEnvelope } from '../src';
 
 // ───────────────────────────────────────────────────────────────────────────

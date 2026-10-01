@@ -1,5 +1,6 @@
-import type { FunctionLike } from '@/modules';
 import type { ITabCountStrategy, ITabCountResponseData } from './tab.types';
+
+import type { FunctionLike } from '@/modules';
 
 /**
  * @summary Compose a fresh tab-count store, a plain framework-agnostic object.

@@ -1,10 +1,10 @@
-import type { GlobalStore } from '../global.store';
-import type { TabCountOperative, TabStore } from './tab.types';
 import type { ICleanUp } from '../../manager.dto';
-
 import { runCleanup } from '../../util';
-import { useTabStore } from './tab-store';
+import type { GlobalStore } from '../global.store';
+
 import { useTabCount } from './tab-count';
+import { useTabStore } from './tab-store';
+import type { TabCountOperative, TabStore } from './tab.types';
 
 export function useTab() {
   let store: TabStore | null = null;

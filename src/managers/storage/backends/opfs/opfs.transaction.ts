@@ -61,8 +61,9 @@ import type {
   ITxOpPredicate,
   TransactionStrength,
 } from '../../storage.types';
-import type { IOPFSTransaction, ManifestEntry, WALOp } from './opfs.types';
 import { buildCanonicalKey, buildModulePrefix, parseCanonicalKey } from '../../storage.util';
+
+import type { IOPFSTransaction, ManifestEntry, WALOp } from './opfs.types';
 
 /**
  * @summary WAL-backed compensating transaction for {@link OPFSBackend}.
@@ -333,7 +334,7 @@ export class OPFSTransaction implements IOPFSTransaction {
           }
         } else if (typeof token === 'function') {
           for (let i = 0; i < this._ops.length; i++) {
-            if (!!token(this._ops[i])) {
+            if (token(this._ops[i])) {
               indicesToRemove.push(i);
             }
           }
@@ -363,7 +364,7 @@ export class OPFSTransaction implements IOPFSTransaction {
     if (this._settled) {
       throw new Error(
         `[OPFSTransaction:${this.id}] Transaction is already settled. ` +
-          `Create a new transaction for further operations.`,
+          'Create a new transaction for further operations.',
       );
     }
   }

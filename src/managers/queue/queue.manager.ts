@@ -30,8 +30,9 @@
  * @author MathAid
  */
 
-import { CorrelationRegistry } from '../packet.registry';
 import { makeFingerprint, type Importance, type PacketEnvelope } from '../packet.dto';
+import { CorrelationRegistry } from '../packet.registry';
+
 import type { QueueConfiguration, QueueItem, QueueStatus, QueueTopology } from './queue.dto';
 
 /**

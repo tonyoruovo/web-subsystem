@@ -338,7 +338,7 @@ export function debounce<T extends FunctionLike<any>>(
     if (options.signal.aborted) {
       const stub = function (
         this: ThisParameterType<T>,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         ..._: Parameters<T>
       ): never {
         throw new ReferenceError(
@@ -495,7 +495,7 @@ export function debounceAsync<T extends FunctionLike<any, Promise<R>>, R = any>(
           : new ReferenceError(`Aborted: ${options.signal.reason}`);
       const stub = function (
         this: ThisParameterType<T>,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         ..._args: Parameters<T>
       ): Promise<R> {
         return Promise.reject(abortError);
@@ -674,7 +674,7 @@ export function throttle<T extends FunctionLike<any>>(
     if (options.signal.aborted) {
       const stub = function (
         this: ThisParameterType<T>,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         ..._: Parameters<T>
       ): never {
         throw new ReferenceError(

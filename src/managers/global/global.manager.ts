@@ -1,16 +1,14 @@
-import { GLOBAL_ERROR_EVENT } from '@/constants';
-
-import type { FunctionLike } from '@/modules';
 import type { PlatformErrorEvent } from '../manager.dto';
-import type { IGlobalEventMap } from './global.dto';
-
-import { detectBrowser } from '@/libs';
 import { runCleanup, tryRun } from '../util';
 
+import type { IGlobalEventMap } from './global.dto';
 import { useGlobalStore } from './global.store';
-
 import { usePortal } from './portal';
 import { useTab } from './tab';
+
+import { GLOBAL_ERROR_EVENT } from '@/constants';
+import { detectBrowser } from '@/libs';
+import type { FunctionLike } from '@/modules';
 
 function detectWorkers() {
   return {

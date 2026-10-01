@@ -27,8 +27,8 @@
  * @see {@link SessionStorageBackend} for the session-scoped sibling.
  */
 
-import type { WebStorageConfig } from './webstorage.types';
 import { WebStorageBackend } from './webstorage.backend';
+import type { WebStorageConfig } from './webstorage.types';
 
 /**
  * @summary `localStorage`-backed implementation of `IStorageBackend<string>`.

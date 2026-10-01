@@ -128,8 +128,6 @@
  * @see {@link CacheTransaction} for the transaction implementation.
  */
 
-import { CACHE_KEY_NAMESPACE } from './cache.const';
-
 import type {
   BackendKind,
   CanonicalKey,
@@ -143,9 +141,10 @@ import type {
   TransactionStrength,
   WriteOptions,
 } from '../../storage.types';
-import type { CacheBackendConfig, CacheBufferedOp, CacheIndexEntry } from './cache.types';
 
+import { CACHE_KEY_NAMESPACE } from './cache.const';
 import { CacheTransaction } from './cache.transaction';
+import type { CacheBackendConfig, CacheBufferedOp, CacheIndexEntry } from './cache.types';
 import { canonicalKeyToURL, urlToCanonicalKey } from './cache.util';
 // ─────────────────────────────────────────────────────────────────────────────
 // CacheBackend
@@ -702,8 +701,8 @@ export class CacheBackend implements IStorageBackend<string> {
     if (strength === 'serializable' || strength === 'compensating') {
       throw new Error(
         `[CacheBackend] Requested transaction strength "${strength}" is not supported. ` +
-          `CacheStorage only offers "best-effort" transactions. ` +
-          `Use IndexedDB for serializable or OPFS for compensating transactions.`,
+          'CacheStorage only offers "best-effort" transactions. ' +
+          'Use IndexedDB for serializable or OPFS for compensating transactions.',
       );
     }
 

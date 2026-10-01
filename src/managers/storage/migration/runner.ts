@@ -1,7 +1,8 @@
 import type { ZodType } from 'zod';
 
-import type { IMigrationRunner } from './types';
 import type { StorageSchema } from '../storage.types';
+
+import type { IMigrationRunner } from './types';
 
 export class MigrationRunner implements IMigrationRunner {
   needsMigration<TSchema extends ZodType>(

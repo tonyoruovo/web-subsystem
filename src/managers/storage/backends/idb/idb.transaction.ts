@@ -76,6 +76,7 @@ import type {
   TransactionStrength,
 } from '../../storage.types';
 import { buildCanonicalKey, buildModulePrefix, parseCanonicalKey } from '../../storage.util';
+
 import type { IDBBufferedOp, IDBRecord, IIDBTransaction } from './idb.types';
 
 /**
@@ -382,7 +383,7 @@ export class IDBTransaction implements IIDBTransaction {
     if (this._settled) {
       throw new Error(
         `[IDBTransaction:${this.id}] Transaction is already settled. ` +
-          `Create a new transaction for further operations.`,
+          'Create a new transaction for further operations.',
       );
     }
   }

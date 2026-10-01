@@ -8,7 +8,14 @@
  * buffer methods.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanonicalKey, ICanonicalKeySegments, ManifestEntry, StorageEnvelope } from '../src';
+
+import type {
+  CanonicalKey,
+  ICanonicalKeySegments,
+  ManifestEntry,
+  StorageEnvelope,
+  WALWriteOp,
+} from '../src';
 import { CacheTransaction, MemoryTransaction, OPFSTransaction } from '../src';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -483,6 +490,3 @@ describe('OPFSTransaction', () => {
     });
   });
 });
-
-// Type alias for readability in WAL tests
-type WALWriteOp = import('../src').WALWriteOp;

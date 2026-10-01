@@ -30,6 +30,7 @@
  */
 
 import { makeFingerprint, type Importance } from '../packet.dto';
+
 import type {
   CircuitBreakerState,
   DispatchStatus,

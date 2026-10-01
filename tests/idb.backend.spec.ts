@@ -24,6 +24,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { CanonicalKey, IDBTransaction, StorageEnvelope } from '../src';
 import { IDBBackend } from '../src';
 

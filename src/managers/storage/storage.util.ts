@@ -1,5 +1,6 @@
-import { anyNil, isNil } from '@/libs';
 import type { CanonicalKey, ICanonicalKeySegments, UnderlyingPlatform } from './storage.types';
+
+import { anyNil, isNil } from '@/libs';
 
 const PLATFORMS = new Set<UnderlyingPlatform>([
   'android',

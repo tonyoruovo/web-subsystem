@@ -109,6 +109,7 @@ import type {
   TransactionStrength,
   WriteOptions,
 } from '../../storage.types';
+
 import { IDBTransaction } from './idb.transaction';
 import type { IDBBackendConfig, IDBBufferedOp, IDBRecord } from './idb.types';
 import {

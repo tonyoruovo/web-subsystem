@@ -11,6 +11,7 @@
  * Memory uses the plain store mock.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type {
   CanonicalKey,
   IIOAdapterFactory,

@@ -1,9 +1,9 @@
 import { isNil } from 'lodash';
 
-import type { FunctionLike } from '@/modules/util.dto';
 import type { ICleanUp, ICleanUpRecord } from './manager.dto';
-
 import { BasicError, PlatformErrorEvent } from './manager.dto';
+
+import type { FunctionLike } from '@/modules/util.dto';
 
 export async function tryRun<F extends FunctionLike<never[]>>(
   op: F,

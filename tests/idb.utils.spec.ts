@@ -20,6 +20,7 @@
  */
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import type { CanonicalKey, IDBRecord } from '../src';
 import {
   DB_VERSION,

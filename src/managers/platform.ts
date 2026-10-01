@@ -21,27 +21,27 @@
  * @author MathAid
  */
 
-import { GlobalState } from './global/global-state.manager';
-import { MessageQueue } from './queue/queue.manager';
-import { NotificationCenter } from './notification/notification.manager';
-import { Logger } from './logger/logger.manager';
-import { CryptoManager } from './crypto/crypto.manager';
-import { cryptoCodec } from './crypto/crypto.codec';
-import { StorageFacade } from './storage/storage.facade';
-import { ConsentManager } from './consent/consent.manager';
-import { NetworkManager } from './network/network.manager';
+import { AnalyticsManager, type AnalyticsSnapshot } from './analytics/analytics.manager';
 import {
   AuthManager,
   type AuthCredentials,
   type AuthTokens,
   type AuthUser,
 } from './auth/auth.manager';
-import { SyncManager } from './sync/sync.manager';
-import { RealtimeManager, type RealtimeSocket } from './realtime/realtime.manager';
-import { TranslationManager } from './translation/translation.manager';
-import { AnalyticsManager, type AnalyticsSnapshot } from './analytics/analytics.manager';
 import { defaultQueueConfig } from './bus';
+import { ConsentManager } from './consent/consent.manager';
+import { cryptoCodec } from './crypto/crypto.codec';
+import { CryptoManager } from './crypto/crypto.manager';
+import { GlobalState } from './global/global-state.manager';
+import { Logger } from './logger/logger.manager';
+import { NetworkManager } from './network/network.manager';
+import { NotificationCenter } from './notification/notification.manager';
+import { MessageQueue } from './queue/queue.manager';
+import { RealtimeManager, type RealtimeSocket } from './realtime/realtime.manager';
+import { StorageFacade } from './storage/storage.facade';
 import type { IStorageBackend, StorageFacadeConfig } from './storage/storage.types';
+import { SyncManager } from './sync/sync.manager';
+import { TranslationManager } from './translation/translation.manager';
 
 /**
  * @summary Options for {@linkcode createPlatform}.

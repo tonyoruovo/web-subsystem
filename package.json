@@ -5,11 +5,14 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "typecheck": "tsc --noEmit -p .",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,html,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,html,css}\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "docs": "typedoc"
   },
   "keywords": [
@@ -32,11 +35,12 @@
     "@types/node": "24.1.0",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^10.7.0",
-    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-import-x": "^4.17.1",
     "fake-indexeddb": "^6.2.5",
     "prettier": "^3.9.5",
-    "typescript": "^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.0.0"
   },

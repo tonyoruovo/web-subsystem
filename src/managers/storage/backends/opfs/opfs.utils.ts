@@ -21,6 +21,7 @@
  * updating the manifest after calling helpers.
  */
 import type { CanonicalKey } from '../../storage.types';
+
 import { decodeBytes, encodeString } from './opfs.io';
 import type {
   IFileIOAdapter,

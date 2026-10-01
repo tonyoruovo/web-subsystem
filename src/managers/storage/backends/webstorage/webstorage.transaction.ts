@@ -68,6 +68,7 @@ import type {
   TransactionStrength,
 } from '../../storage.types';
 import { buildCanonicalKey, buildModulePrefix, parseCanonicalKey } from '../../storage.util';
+
 import type {
   IWebStorageTransaction,
   WebStorageBufferedOp,
@@ -508,7 +509,7 @@ export class WebStorageTransaction implements IWebStorageTransaction {
     if (this._settled) {
       throw new Error(
         `[WebStorageTransaction:${this.id}] Transaction is already settled. ` +
-          `Create a new transaction for further operations.`,
+          'Create a new transaction for further operations.',
       );
     }
   }

@@ -33,8 +33,8 @@
  * @see {@link LocalStorageBackend} for the persistent-across-sessions sibling.
  */
 
-import type { WebStorageConfig } from './webstorage.types';
 import { WebStorageBackend } from './webstorage.backend';
+import type { WebStorageConfig } from './webstorage.types';
 
 /**
  * @summary `sessionStorage`-backed implementation of `IStorageBackend<string>`.

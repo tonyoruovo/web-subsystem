@@ -23,8 +23,8 @@
  * @author MathAid
  */
 
-import { CorrelationRegistry } from '../packet.registry';
 import type { PacketEnvelope } from '../packet.dto';
+import { CorrelationRegistry } from '../packet.registry';
 
 /**
  * @summary The minimal MessagePort surface the transport needs.

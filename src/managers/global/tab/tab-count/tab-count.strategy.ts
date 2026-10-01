@@ -1,14 +1,7 @@
 import { v4 as uuidV4 } from 'uuid';
 
-import {
-  TAB_COUNTER_CHANNEL,
-  TAB_COUNTER_STORAGE_KEY,
-  WORKER_ERROR,
-  WORKER_PORT_ERROR,
-} from '@/constants';
+import { BasicError, PlatformErrorEvent } from '../../../manager.dto';
 import { TabCountTransactionType } from '../tab.types';
-
-import type { FunctionLike } from '@/modules';
 import type {
   ITabCountError,
   ITabCountRequest,
@@ -17,9 +10,17 @@ import type {
   TabOperative,
 } from '../tab.types';
 
-import { stringToHash } from '@/libs';
-import { BasicError, PlatformErrorEvent } from '../../../manager.dto';
 import TabCountWorker from './tab-count.worker?sharedworker';
+
+import {
+  TAB_COUNTER_CHANNEL,
+  TAB_COUNTER_STORAGE_KEY,
+  WORKER_ERROR,
+  WORKER_PORT_ERROR,
+} from '@/constants';
+import { stringToHash } from '@/libs';
+import type { FunctionLike } from '@/modules';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared promise-callback helpers
 // ─────────────────────────────────────────────────────────────────────────────

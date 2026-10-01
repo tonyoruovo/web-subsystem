@@ -21,12 +21,10 @@
  * @author MathAid
  */
 
-import { AuthManager } from './auth.manager';
-import {
-  NetworkManager,
-  type NetworkRequestConfig,
-  type NetworkResponse,
-} from '../network/network.manager';
+import type { NetworkManager } from '../network/network.manager';
+import { type NetworkRequestConfig, type NetworkResponse } from '../network/network.manager';
+
+import type { AuthManager } from './auth.manager';
 
 /**
  * @summary A request function that injects the token and handles 401 refresh.

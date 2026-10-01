@@ -12,6 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { CancellableAsync } from '../src';
 import { debounce, debounceAsync, throttle } from '../src';
 

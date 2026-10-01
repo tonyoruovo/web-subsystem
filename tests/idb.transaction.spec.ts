@@ -19,6 +19,7 @@
  *   - operations getter — read-only view, correct after each buffer call
  */
 import { describe, expect, it, vi } from 'vitest';
+
 import type { CanonicalKey, ICanonicalKeySegments, IDBBufferedOp, IDBRecord } from '../src';
 import { IDBTransaction } from '../src';
 

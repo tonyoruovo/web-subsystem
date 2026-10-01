@@ -56,7 +56,7 @@ No code is written until both steps are done.
 
 *Goal: a trustworthy baseline to build on.*
 
-- Initialize git. Add CI (type-check, lint, test).
+- Initialize git. Add a CI workflow (type-check, lint, test). **Deferred:** the workflow exists, but CI is not run until the repository has a GitHub remote (decided 2026-10-01).
 - Add `vitest.config.ts` with the `@/` alias, and exclude `dist/`.
 - Fix the 21 `tsc` errors.
 - Convert the repo to a pnpm workspace with an empty `packages/` tree. Existing code stays in `src/` until it is ported.
@@ -64,7 +64,7 @@ No code is written until both steps are done.
 - Encode the minimum browser versions (Q6) in a browserslist config and the test matrix.
 - Merge amendments A1–A10 (§15) into `proposals/README.md`, after review.
 
-**Gate:** all existing tests pass, `tsc` is clean, CI is green, and amendments A1–A10 are merged into the README.
+**Gate:** all existing tests pass, `tsc` is clean, `pnpm check` passes locally (CI deferred), and amendments A1–A10 are merged into the README.
 
 ### M1 — Kernel (`core`)
 

@@ -1,0 +1,22 @@
+{
+  "name": "@platform/global-state",
+  "version": "0.0.2",
+  "description": "The Global State subsystem: derived platform status, admission, pending work, environment and tab identity.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "@platform/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@platform/core": "workspace:*"
+  },
+  "license": "ISC"
+}

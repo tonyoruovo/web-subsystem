@@ -1,0 +1,20 @@
+{
+  "name": "@platform/core",
+  "version": "0.0.2",
+  "description": "The kernel of the platform: units, lifecycle, dependencies, state, views, packets and scopes.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "license": "ISC"
+}

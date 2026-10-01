@@ -22,7 +22,7 @@
  *   Eviction:      Phase-1 TTL sweep, Phase-2 weighted (lru, lfu, fifo, user)
  *   Abort signal:  write, clear, initialize
  */
-// import 'fake-indexeddb/auto'
+import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanonicalKey, IDBTransaction, StorageEnvelope } from '../src';
 import { IDBBackend } from '../src';

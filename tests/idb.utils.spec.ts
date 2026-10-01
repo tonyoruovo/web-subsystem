@@ -18,7 +18,7 @@
  *   - collectExpired      — expired vs never-expiring vs future records
  *   - collectByWeight     — ordering, prefix filtering
  */
-// import 'fake-indexeddb/auto'
+import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CanonicalKey, IDBRecord } from '../src';
 import {

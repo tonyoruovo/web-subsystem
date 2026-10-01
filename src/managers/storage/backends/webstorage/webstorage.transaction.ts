@@ -426,7 +426,8 @@ export class WebStorageTransaction implements IWebStorageTransaction {
         // Prune snapshot entries for keys no longer referenced by any remaining op.
         this._pruneOrphanedSnapshots();
 
-        resolve(Object.freeze(removed));
+        // An index always yields a one-element tuple (ITransaction contract).
+        resolve(Object.freeze(typeof token === 'number' ? [removed[0]] : removed));
       } catch {
         resolve([]);
       }

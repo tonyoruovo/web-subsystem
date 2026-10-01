@@ -147,7 +147,10 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
   const consent = new ConsentManager();
 
   // 8. Network
-  const network = new NetworkManager({ fetchFn: options.fetchFn });
+  const network = new NetworkManager({
+    fetchFn: options.fetchFn,
+    warn: { warn: (m) => logger.log('WARN', m) },
+  });
 
   // 9. Auth
   const auth = new AuthManager({ loginFn: options.loginFn, refreshFn: options.refreshFn });

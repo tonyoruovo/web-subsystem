@@ -36,7 +36,6 @@ export class MemoryTransaction<TRaw> implements ITransaction {
   }
 
   constructor(
-    private readonly _store: Map<CanonicalKey, StorageEnvelope<TRaw>>,
     private readonly _onCommit: (txId: string, ops: BufferedOp<TRaw>[]) => void,
     private readonly _onRollback?: (txId: string) => void,
   ) {
@@ -68,7 +67,8 @@ export class MemoryTransaction<TRaw> implements ITransaction {
     try {
       this._onCommit(this.id, this._ops);
     } catch (cause) {
-      await this.rollback();
+      // Already settled, so discard directly: rollback() would throw "already settled".
+      this._discard();
       throw new ReferenceError(`An op threw. Rollback was applied: ${cause}`, { cause });
     }
   }
@@ -99,9 +99,7 @@ export class MemoryTransaction<TRaw> implements ITransaction {
     this._assertOpen();
     if (token === undefined) {
       this._settled = true;
-      // Discard the buffer - nothing was written, so no undo needed.
-      this._ops.length = 0;
-      this._onRollback?.(this.id);
+      this._discard();
       return;
     }
 
@@ -163,13 +161,14 @@ export class MemoryTransaction<TRaw> implements ITransaction {
           }
         }
 
-        // Remove in reverse order
+        // Remove in reverse order so earlier indices stay valid during splice.
         const removed: BufferedOp<TRaw>[] = [];
-        for (const idx of indicesToRemove) {
-          removed.push(Object.freeze(this._ops.splice(idx, 1)[0]));
+        for (let i = indicesToRemove.length - 1; i >= 0; i--) {
+          removed.unshift(Object.freeze(this._ops.splice(indicesToRemove[i], 1)[0]));
         }
 
-        resolve(Object.freeze(removed));
+        // An index always yields a one-element tuple (ITransaction contract).
+        resolve(Object.freeze(typeof token === 'number' ? [removed[0]] : removed));
       } catch {
         // reject(error); // Do not throw an error
         resolve([]);
@@ -178,6 +177,12 @@ export class MemoryTransaction<TRaw> implements ITransaction {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  /** Discards the buffer and deregisters. Nothing was written, so no undo is needed. */
+  private _discard() {
+    this._ops.length = 0;
+    this._onRollback?.(this.id);
+  }
 
   private _assertOpen() {
     if (this._settled) {

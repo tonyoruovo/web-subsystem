@@ -296,7 +296,10 @@ export class CacheBackend implements IStorageBackend<string> {
 
     try {
       if (typeof caches === 'undefined') {
-        return { available: false, reason: 'CacheStorage (caches) is not defined in this context' };
+        return {
+          available: false,
+          reason: 'CacheStorage (caches) is not available in this context',
+        };
       }
 
       const probeCache = await caches.open(probeName);
@@ -701,7 +704,7 @@ export class CacheBackend implements IStorageBackend<string> {
     if (strength === 'serializable' || strength === 'compensating') {
       throw new Error(
         `[CacheBackend] Requested transaction strength "${strength}" is not supported. ` +
-          'CacheStorage only offers "best-effort" transactions. ' +
+          'CacheStorage supports only "best-effort" transactions. ' +
           'Use IndexedDB for serializable or OPFS for compensating transactions.',
       );
     }

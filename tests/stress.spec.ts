@@ -58,6 +58,8 @@ describe('MemoryBackend – stress', () => {
       _transactions: new Map(),
       _readCount: new Map(),
     } as MemoryStore;
+    // Fresh module graph, so each test's store is the one the backend uses.
+    vi.resetModules();
     vi.doMock('@/managers/storage/backends/memory/memory.store', () => ({
       useMemoryStore: () => mockStore,
     }));
@@ -339,19 +341,27 @@ describe('OPFSBackend – stress', () => {
     } as IIOAdapterFactory;
     mockFactory = factory;
 
-    const rootDir = {
-      kind: 'directory',
-      async getFileHandle(name: string, _opts?: { create?: boolean }) {
-        return { _filePath: name, kind: 'file' };
-      },
-      async getDirectoryHandle(_name: string, _opts?: { create?: boolean }) {
-        return { kind: 'directory' };
-      },
-      async removeEntry() {},
-      keys() {
-        return [];
-      },
+    // Directory handles that nest, keyed by path relative to the backend's root.
+    const makeDir = (path: string): any => {
+      const join = (name: string) => (path ? `${path}/${name}` : name);
+      return {
+        kind: 'directory',
+        async getFileHandle(name: string) {
+          return { _filePath: join(name), kind: 'file' };
+        },
+        async getDirectoryHandle(name: string) {
+          return makeDir(join(name));
+        },
+        async removeEntry(name: string) {
+          fs.delete(join(name));
+        },
+        keys() {
+          return [];
+        },
+      };
     };
+    const backendRoot = makeDir('');
+    const rootDir = { ...makeDir('__origin__'), getDirectoryHandle: async () => backendRoot };
 
     vi.stubGlobal('navigator', {
       storage: {
@@ -402,6 +412,7 @@ describe('OPFSBackend – stress', () => {
     await tx.rollback();
     // Only manifest and WAL files should exist; no data files added
     const afterCount = fs.size;
+    expect(afterCount).toBe(beforeCount);
     // The rollback should not have written any data files
     // (manifest might have been rewritten by init, but no data files)
     const dataFileCount = [...fs.keys()].filter((k) => !k.startsWith('_')).length;
@@ -478,6 +489,8 @@ describe('Abuse & edge cases – shared patterns', () => {
       _transactions: new Map(),
       _readCount: new Map(),
     } as MemoryStore;
+    // Fresh module graph, so each test's store is the one the backend uses.
+    vi.resetModules();
     vi.doMock('@/managers/storage/backends/memory/memory.store', () => ({
       useMemoryStore: () => mockStore,
     }));

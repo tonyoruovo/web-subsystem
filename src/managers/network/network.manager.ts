@@ -261,6 +261,11 @@ export class NetworkManager {
       if (strategy === 'network-first') {
         const cached = this.readCache(cacheKey);
         if (cached) {
+          // Degraded but continuing: make the stale response visible.
+          this.warn.warn(
+            `[NetworkManager] ${cfg.method ?? 'GET'} ${cfg.url} failed; serving cached response. ` +
+              `Cause: ${error instanceof Error ? error.message : String(error)}`,
+          );
           return {
             status: cached.status,
             statusText: cached.statusText,

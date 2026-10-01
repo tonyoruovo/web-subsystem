@@ -215,9 +215,42 @@ class AsyncFileIOAdapter implements IFileIOAdapter {
 export class SyncIOAdapterFactory implements IIOAdapterFactory {
   readonly context: OPFSExecutionContext = 'worker';
 
+  /**
+   * @param lockTimeoutMs - Maximum time to wait for the file's exclusive sync
+   * handle (see `OPFSBackendConfig.lockTimeoutMs`). Defaults to 5000.
+   */
+  constructor(private readonly lockTimeoutMs: number = 5_000) {}
+
+  /**
+   * @throws {DOMException} `TimeoutError` when the file's lock is not acquired
+   * within `lockTimeoutMs`. A handle that arrives after the timeout is closed,
+   * so the lock is not leaked.
+   */
   async open(handle: FileSystemFileHandle): Promise<IFileIOAdapter> {
-    const syncHandle = await handle.createSyncAccessHandle();
-    return new SyncFileIOAdapter(syncHandle);
+    const pending = handle.createSyncAccessHandle();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new DOMException(
+              `[OPFS] Timed out after ${this.lockTimeoutMs} ms waiting for the file lock.`,
+              'TimeoutError',
+            ),
+          ),
+        this.lockTimeoutMs,
+      );
+    });
+    try {
+      const syncHandle = await Promise.race([pending, timeout]);
+      return new SyncFileIOAdapter(syncHandle);
+    } catch (error) {
+      // Release a handle that is acquired after we gave up waiting.
+      pending.then((late) => late.close()).catch(() => {});
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -266,11 +299,11 @@ export class AsyncIOAdapterFactory implements IIOAdapterFactory {
  * console.log(factory.context) // 'worker' or 'main-thread'
  * ```
  */
-export function detectIOAdapterFactory(): IIOAdapterFactory {
+export function detectIOAdapterFactory(lockTimeoutMs?: number): IIOAdapterFactory {
   const isWorker =
     typeof window === 'undefined' &&
     typeof FileSystemFileHandle !== 'undefined' &&
     'createSyncAccessHandle' in FileSystemFileHandle.prototype;
 
-  return isWorker ? new SyncIOAdapterFactory() : new AsyncIOAdapterFactory();
+  return isWorker ? new SyncIOAdapterFactory(lockTimeoutMs) : new AsyncIOAdapterFactory();
 }

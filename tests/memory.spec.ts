@@ -49,7 +49,7 @@ function env(overrides: Partial<StorageEnvelope<string>> = {}): StorageEnvelope<
 // We need to intercept `useMemoryStore` to return our mock
 let mockStore: ReturnType<typeof createMockStore>;
 
-vi.mock('@/composables/managers/storage/backends/memory/memory.store', () => ({
+vi.mock('@/managers/storage/backends/memory/memory.store', () => ({
   useMemoryStore: () => mockStore,
 }));
 
@@ -375,7 +375,7 @@ describe('MemoryBackend', () => {
 
     it('phase 1: evicts expired entries first', async () => {
       const expiredKey = 'myapp:chrome:130:auth:old' as CanonicalKey;
-      await backend.write(KEY_A, env({ weight: 1, expires_at: Date.now() - 1 }));
+      await backend.write(expiredKey, env({ weight: 1, expires_at: Date.now() - 1 }));
       await backend.write(KEY_B, env({ weight: 1, expires_at: null }));
       const freed = await backend.evict(1, 'fifo');
       expect(freed).toBeGreaterThan(0);

@@ -343,6 +343,7 @@ export function debounce<T extends FunctionLike<any>>(
       ): never {
         throw new ReferenceError(
           `The input signal was already aborted prior: ${options.signal?.reason}`,
+          { cause: options.signal?.reason },
         );
       };
 
@@ -356,11 +357,14 @@ export function debounce<T extends FunctionLike<any>>(
     if (options.signal?.aborted) {
       throw new ReferenceError(
         `The input signal was already aborted prior: ${options.signal?.reason}`,
+        { cause: options.signal?.reason },
       );
     }
 
     clearTimeout(asyncHandle);
     asyncHandle = setTimeout(() => {
+      // The call ran: nothing is pending any more, so cancel() reports false.
+      asyncHandle = undefined;
       if (options.signal) {
         options.signal.removeEventListener('abort', cancel);
       }
@@ -649,11 +653,10 @@ export function throttle<T extends FunctionLike<any>>(
   options: RateLimitOptions = {},
 ): Cancellable<T> {
   // Private fields
-  // -Infinity ensures `remaining` is always deeply negative on the very first call,
-  // so the leading-edge branch fires unconditionally — regardless of whether the
-  // runtime clock (or a fake timer) starts at 0.
-  // Private fields
-  let lastRan = 0;
+  // -Infinity makes the very first call fire on the leading edge unconditionally,
+  // regardless of whether the runtime clock (or a fake timer) starts at 0.
+  let lastRan = -Infinity; // time of the last execution
+  let lastCall = -Infinity; // time of the last invocation
   let asyncHandle: ReturnType<typeof setTimeout> | undefined;
   let lastArgs: Parameters<T> | null = null;
   let lastContext: ThisParameterType<T> | null = null;
@@ -663,7 +666,9 @@ export function throttle<T extends FunctionLike<any>>(
     const handleRemoved = !isUndefined(asyncHandle);
     clearTimeout(asyncHandle);
     asyncHandle = undefined;
-    lastRan = 0; // Reset timing: the next call fires immediately on the leading edge
+    // Reset timing: the next call fires immediately on the leading edge
+    lastRan = -Infinity;
+    lastCall = -Infinity;
     lastArgs = null;
     lastContext = null;
     return handleRemoved;
@@ -679,6 +684,7 @@ export function throttle<T extends FunctionLike<any>>(
       ): never {
         throw new ReferenceError(
           `The input signal was already aborted prior: ${options.signal?.reason}`,
+          { cause: options.signal?.reason },
         );
       };
 
@@ -695,8 +701,12 @@ export function throttle<T extends FunctionLike<any>>(
     const context = this;
     const now = Date.now();
     const remaining = limitMs - (now - lastRan);
+    const sinceLastCall = now - lastCall;
+    lastCall = now;
 
-    if (remaining <= 0 || remaining > limitMs) {
+    // Leading edge: nothing is pending and the caller was quiet for a full
+    // window (as in lodash's throttle), or the clock moved backwards.
+    if (!asyncHandle && (sinceLastCall >= limitMs || remaining > limitMs)) {
       if (asyncHandle) {
         clearTimeout(asyncHandle);
         asyncHandle = undefined;
@@ -715,19 +725,22 @@ export function throttle<T extends FunctionLike<any>>(
       lastContext = context;
 
       if (!asyncHandle) {
-        asyncHandle = setTimeout(() => {
-          // Guard only on lastArgs — lastContext is legitimately null when throttle
-          // is invoked as a plain function rather than a method, and fn.apply(null, args)
-          // is equivalent to a plain call. Guarding on lastContext would silently swallow
-          // the trailing execution in the common non-method case.
-          if (lastArgs) {
-            fn.apply(lastContext, lastArgs);
-            lastRan = Date.now();
-            lastArgs = null;
-            lastContext = null;
+        asyncHandle = setTimeout(
+          () => {
             asyncHandle = undefined;
-          }
-        }, remaining);
+            // Guard only on lastArgs — lastContext is legitimately null when throttle
+            // is invoked as a plain function rather than a method, and fn.apply(null, args)
+            // is equivalent to a plain call. Guarding on lastContext would silently swallow
+            // the trailing execution in the common non-method case.
+            if (lastArgs) {
+              fn.apply(lastContext, lastArgs);
+              lastRan = Date.now();
+              lastArgs = null;
+              lastContext = null;
+            }
+          },
+          Math.max(0, remaining),
+        );
       }
     }
   };

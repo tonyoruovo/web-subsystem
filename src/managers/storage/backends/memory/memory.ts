@@ -81,8 +81,8 @@ import { sizeOf } from '@/libs';
  * |  write(key, envelope)            beginTransaction()                  |
  * |  |                               |                                   |
  * |  +-> _store.set(key, envelope)   +-> new MemoryTransaction(          |
- * |                                           _store,   <- unused bug     |
- * |  read(key)                                _applyOps <- the callback   |
+ * |                                           _applyOps <- the callback   |
+ * |  read(key)                                                            |
  * |  |                                |    )                             |
  * |  |-> TTL check (_isExpired)       |    stored in _transactions[id]   |
  * |  |-> _store.get(key)              |                                  |
@@ -104,9 +104,9 @@ import { sizeOf } from '@/libs';
  * |      |                            |            |-> delete -> _store   |
  * |      |-> sort by weight asc       |            +-> clear -> _store    |
  * |      |-> tie-break by policy      |                                  |
- * |      |   lru/fifo -> written_at    |   (!) tx NOT removed from        |
- * |      |   lfu -> _readCount         |     _transactions after commit   |
- * |      |   user -> comparator fn     |     <- BUG: leaks forever         |
+ * |      |   lru/fifo -> written_at    |   tx removed from _transactions  |
+ * |      |   lfu -> _readCount         |     after commit                 |
+ * |      |   user -> comparator fn     |                                  |
  * |      +-> delete until freed       |                                  |
  * |          >= targetBytes           |    tx.rollback()                 |
  * |                                   |    +-> ops[] = []  (discard)     |
@@ -203,6 +203,8 @@ export class MemoryBackend implements IStorageBackend<unknown> {
     }
 
     this.store._store.set(key, envelope);
+    // A new value has not been read yet (LFU).
+    this.store._readCount.delete(key);
   }
 
   async read(key: CanonicalKey, options?: ReadOptions): Promise<StorageEnvelope<unknown> | null> {
@@ -245,6 +247,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
     options?: { transactionId?: string; signal?: AbortSignal },
   ): Promise<void> {
     this._assertInitialized();
+    options?.signal?.throwIfAborted();
 
     if (options?.transactionId) {
       const tx = this._getTransaction(options.transactionId);
@@ -324,7 +327,6 @@ export class MemoryBackend implements IStorageBackend<unknown> {
     }
 
     const tx = new MemoryTransaction<unknown>(
-      this.store._store,
       (txId: string, ops: BufferedOp<unknown>[]) => this._applyOps(txId, ops),
       (txId: string) => this.store._transactions.delete(txId),
     );
@@ -414,11 +416,11 @@ export class MemoryBackend implements IStorageBackend<unknown> {
     });
 
     // Step 3: evict until target is met or store is empty
-    for (const { key } of candidates) {
+    for (const { key, envelope } of candidates) {
       if (freed >= targetBytes) break;
       this.store._store.delete(key);
       this.store._readCount.delete(key);
-      freed++;
+      freed += sizeOf(envelope); // bytes, like phase 1
     }
 
     return freed;
@@ -428,7 +430,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
 
   private _assertInitialized() {
     if (!this.store._initialized) {
-      throw new Error('[MemoryBackend] Backend has not been initialized. Call initialize() first.');
+      throw new Error('[MemoryBackend] Backend not initialized. Call initialize() first.');
     }
   }
 
@@ -454,6 +456,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
       switch (op.kind) {
         case 'write':
           this.store._store.set(op.key!, op.envelope!);
+          this.store._readCount.delete(op.key!);
           break;
         case 'delete':
           this.store._store.delete(op.key!);

@@ -56,8 +56,6 @@ export interface TranslationManagerOptions {
   defaultLocale?: string;
   /** The base fallback locale. Defaults to `en`. */
   fallbackLocale?: string;
-  /** Injectable id factory. Defaults to a local counter. */
-  makeId?: () => string;
   /** Optional missing-key sink. */
   onMissingKey?: (key: string, locale: string) => void;
 }
@@ -89,9 +87,6 @@ export class TranslationManager {
   /** @internal key to missing-key record. */
   private readonly missingKeys = new Map<string, { count: number; locales: Set<string> }>();
 
-  /** @internal The id factory. */
-  private readonly makeId: () => string;
-
   /** @internal The missing-key sink. */
   private readonly onMissingKey?: (key: string, locale: string) => void;
 
@@ -102,7 +97,6 @@ export class TranslationManager {
   constructor(options: TranslationManagerOptions = {}) {
     this.activeLocale = options.defaultLocale ?? 'en';
     this.fallbackLocale = options.fallbackLocale ?? 'en';
-    this.makeId = options.makeId ?? makeCounter();
     this.onMissingKey = options.onMissingKey;
   }
 
@@ -271,14 +265,4 @@ function interpolate(message: string, params: Record<string, unknown>): string {
   return message.replace(/\{(\w+)\}/g, (_, name: string) =>
     params[name] === undefined ? `{${name}}` : String(params[name]),
   );
-}
-
-/**
- * @summary Builds a monotonically increasing id factory.
- * @returns {() => string} A function that returns a new id on each call.
- * @internal
- */
-function makeCounter(): () => string {
-  let counter = 0;
-  return () => `missing-${++counter}`;
 }

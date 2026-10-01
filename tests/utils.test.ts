@@ -577,6 +577,8 @@ describe('debounceAsync()', () => {
         vi.advanceTimersByTime(10);
         return d(i);
       });
+      // Superseded calls reject by design; handle them so they are not unhandled.
+      promises.slice(0, -1).forEach((p) => p.catch(() => {}));
 
       vi.advanceTimersByTime(200);
 
@@ -593,7 +595,7 @@ describe('debounceAsync()', () => {
   describe('[unit] cancel()', () => {
     it('returns true when a pending timer exists', async () => {
       const d = debounceAsync(vi.fn().mockResolvedValue(null), 200);
-      d();
+      d().catch(() => {}); // cancel() rejects it by design
       expect(d.cancel()).toBe(true);
     });
 
@@ -623,7 +625,7 @@ describe('debounceAsync()', () => {
 
     it('is idempotent — second call returns false', () => {
       const d = debounceAsync(vi.fn().mockResolvedValue(null), 200);
-      d();
+      d().catch(() => {}); // cancel() rejects it by design
       expect(d.cancel()).toBe(true);
       expect(d.cancel()).toBe(false);
     });
@@ -896,18 +898,24 @@ describe('debounceAsync()', () => {
 
       // Simulate rapid typing
       const catchable = (p: Promise<unknown>) => p.catch(() => null);
-      await Promise.all([
+      const pending = Promise.all([
         catchable(search('r')),
         catchable(search('re')),
         catchable(search('rea')),
         catchable(search('reac')),
         catchable(search('react')),
       ]);
+      expect(callCount).toBe(0); // nothing runs before the window passes
 
-      // Advance past last call
+      // Advance past the last call, then wait for every promise to settle.
+      // (Awaiting first would deadlock: the last promise needs the timer.)
       vi.advanceTimersByTime(300);
-      // Only 'react' should resolve — others superseded synchronously
-      expect(callCount).toBe(0); // timer not yet expired at Promise.all resolution
+      const results = await pending;
+
+      // Only 'react' resolves — the others were superseded and rejected.
+      expect(callCount).toBe(1);
+      expect(fetchResults).toHaveBeenCalledWith('react');
+      expect(results).toEqual([null, null, null, null, { query: 'react', results: [] }]);
     });
 
     it('auto-save: pending save is cancelled on navigation away', async () => {

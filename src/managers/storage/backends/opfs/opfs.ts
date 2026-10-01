@@ -270,18 +270,17 @@ export class OPFSBackend implements IStorageBackend<string> {
   private _readCount: Map<CanonicalKey, number> = new Map();
 
   private readonly _rootDirName: string;
-  private readonly _lockTimeoutMs: number;
 
   constructor(config: OPFSBackendConfig = {}) {
     this._rootDirName = config.rootDirName ?? 'storage';
-    this._lockTimeoutMs = config.lockTimeoutMs ?? 5_000;
+    const lockTimeoutMs = config.lockTimeoutMs ?? 5_000;
 
     if (config.context === 'worker') {
-      this._factory = new SyncIOAdapterFactory();
+      this._factory = new SyncIOAdapterFactory(lockTimeoutMs);
     } else if (config.context === 'main-thread') {
       this._factory = new AsyncIOAdapterFactory();
     } else {
-      this._factory = detectIOAdapterFactory();
+      this._factory = detectIOAdapterFactory(lockTimeoutMs);
     }
   }
 

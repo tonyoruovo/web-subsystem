@@ -685,12 +685,14 @@ describe('IDBBackend — evict', () => {
     await backend.write(KEY_B, env({ weight: 1 })); // phase 2 if needed
     await backend.write(KEY_C, env({ weight: 100 })); // should survive
 
-    // Target enough bytes to hit both phases
-    await backend.evict(10_000_000, 'lru');
+    // Half the usage: phase 1 (KEY_A, about a third) is not enough, so phase 2
+    // evicts KEY_B. A target above the total would evict every entry, because
+    // a higher weight means evicted last, not never.
+    const { used } = await backend.estimateQuota();
+    await backend.evict(Math.ceil(used / 2), 'lru');
 
     expect(await backend.read(KEY_A)).toBeNull();
-    // After phase 1 frees KEY_A, targetBytes may still not be met,
-    // so KEY_B (lower weight) gets evicted next.
+    expect(await backend.read(KEY_B)).toBeNull();
     expect(await backend.read(KEY_C)).not.toBeNull(); // high-weight entry survives last
   });
 });

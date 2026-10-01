@@ -13,7 +13,13 @@ import type {
   ManifestEntry,
   StorageEnvelope,
 } from '../src';
-import { OPFSBackend, bytesToBase64, decodeBytes, encodeString } from '../src';
+import {
+  OPFSBackend,
+  SyncIOAdapterFactory,
+  bytesToBase64,
+  decodeBytes,
+  encodeString,
+} from '../src';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Mock infrastructure
@@ -49,15 +55,16 @@ function createMockAdapter(filePath: string): IFileIOAdapter {
     async readAll() {
       const content = fs.get(filePath);
       if (content === undefined) throw new Error('NotFound');
-      // Simulate decoding
-      return decodeBytes(encodeString(content));
+      // IFileIOAdapter.readAll() resolves to bytes, not a string.
+      return encodeString(content);
     },
     async writeAll(data: Uint8Array) {
       fs.set(filePath, decodeBytes(data));
       ops.push('write');
     },
     async truncate() {
-      fs.delete(filePath);
+      // Truncating leaves an empty file; it does not delete it.
+      fs.set(filePath, '');
       ops.push('truncate');
     },
     async close() {
@@ -126,7 +133,15 @@ describe('OPFSBackend', () => {
     fs = new Map();
     manifest = new Map();
     // fileHandleMocks = new Map()
-    rootDir = createDirHandle('storage');
+    // The OPFS origin root. The backend opens its own 'storage' directory inside it;
+    // paths in `fs` are relative to that directory, so it gets an empty path.
+    const backendRoot = createDirHandle('');
+    rootDir = {
+      ...createDirHandle('__origin__'),
+      async getDirectoryHandle() {
+        return backendRoot;
+      },
+    };
 
     storageGlobal = {
       getDirectory: vi.fn().mockResolvedValue(rootDir),
@@ -555,8 +570,12 @@ describe('OPFSBackend', () => {
 
     it('initialize() respects signal', async () => {
       const ac = new AbortController();
-      // Abort before initialization completes
-      setTimeout(() => ac.abort(), 0);
+      // Abort while the first step (opening the OPFS root) is in flight; the
+      // backend checks the signal between steps.
+      storageGlobal.getDirectory.mockImplementationOnce(async () => {
+        ac.abort();
+        return rootDir;
+      });
       await expect(backend.initialize(ac.signal)).rejects.toThrow();
     });
   });
@@ -585,5 +604,30 @@ describe('OPFSBackend', () => {
       await backend.write(KEY_A, env({ payload: 'v2' }));
       expect((backend as any)._readCount.has(KEY_A)).toBe(false);
     });
+  });
+});
+
+describe('SyncIOAdapterFactory', () => {
+  it('times out waiting for a locked file and releases a late handle', async () => {
+    vi.useFakeTimers();
+    try {
+      const late = { close: vi.fn() };
+      let grant!: (h: unknown) => void;
+      const handle = {
+        createSyncAccessHandle: () => new Promise((resolve) => (grant = resolve)),
+      } as unknown as FileSystemFileHandle;
+
+      const opening = new SyncIOAdapterFactory(50).open(handle);
+      const assertion = expect(opening).rejects.toMatchObject({ name: 'TimeoutError' });
+      await vi.advanceTimersByTimeAsync(50);
+      await assertion;
+
+      // The lock arrives after the caller gave up: it must be closed, not leaked.
+      grant(late);
+      await vi.runAllTimersAsync();
+      expect(late.close).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

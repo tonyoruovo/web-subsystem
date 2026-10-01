@@ -153,12 +153,14 @@ describe('CacheBackend', () => {
       await expect(backend.delete(KEY_A)).resolves.not.toThrow();
     });
 
-    it('clear without prefix deletes entire cache and reopens', async () => {
+    it('clear without prefix deletes every entry', async () => {
       await backend.write(KEY_A, env());
       await backend.write(KEY_B, env());
       await backend.clear();
-      // Cache should have been deleted and reopened
-      expect(mockCaches.delete).toHaveBeenCalledWith('test-cache');
+      // proposals/cache_PROPOSAL.md: clear() -> prefix scan -> delete* -> _index sweep
+      expect(await backend.read(KEY_A)).toBeNull();
+      expect(await backend.read(KEY_B)).toBeNull();
+      expect(await backend.count()).toBe(0);
     });
 
     it('clear with prefix removes only matching entries', async () => {

@@ -642,8 +642,12 @@ export class IDBBackend implements IStorageBackend<string> {
         ratio: quota > 0 ? usage / quota : 0,
       };
     } catch {
+      // No StorageManager API: measure this store's own records instead of
+      // reporting zero usage, which would make eviction targets meaningless.
       const softCap = 250 * 1024 * 1024;
-      return { used: 0, available: softCap, ratio: 0 };
+      const records = await collectByWeight(this._db!, this._storeName);
+      const used = records.reduce((sum, rec) => sum + this._approximateBytes(rec), 0);
+      return { used, available: Math.max(0, softCap - used), ratio: Math.min(1, used / softCap) };
     }
   }
 

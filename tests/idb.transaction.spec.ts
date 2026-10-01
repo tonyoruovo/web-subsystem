@@ -235,13 +235,13 @@ describe('IDBTransaction — rollback(index)', () => {
     const { tx } = makeTx();
     tx.bufferWrite(KEY_A, makeRecord(KEY_A));
     const removed = await tx.rollback(99);
-    expect(removed).toHaveLength(0);
+    expect(removed).toEqual([undefined]);
   });
 
-  it('returns empty for index on an empty buffer', async () => {
+  it('returns a tuple with undefined for index on an empty buffer', async () => {
     const { tx } = makeTx();
     const removed = await tx.rollback(0);
-    expect(removed).toHaveLength(0);
+    expect(removed).toEqual([undefined]);
   });
 });
 

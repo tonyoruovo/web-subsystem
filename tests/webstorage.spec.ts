@@ -57,7 +57,7 @@ function createMockStorage(quotaBytes?: number): Storage & { _data: Map<string, 
         const newBytes = (key.length + value.length) * 2;
         if (totalBytes() - existingBytes + newBytes > quotaBytes) {
           const e = new DOMException('QuotaExceededError', 'QuotaExceededError');
-          (e as any).code = 22;
+          // A DOMException named QuotaExceededError already reports code 22; code is read-only.
           throw e;
         }
       }

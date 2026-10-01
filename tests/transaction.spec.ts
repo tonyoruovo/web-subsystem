@@ -71,7 +71,7 @@ describe('MemoryTransaction', () => {
   beforeEach(() => {
     onCommit = vi.fn();
     onRollback = vi.fn();
-    tx = new MemoryTransaction<unknown>(new Map(), onCommit as never, onRollback as never);
+    tx = new MemoryTransaction<unknown>(onCommit as never, onRollback as never);
   });
 
   it('has a UUID id and strength "best-effort"', () => {

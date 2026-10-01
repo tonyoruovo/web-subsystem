@@ -275,7 +275,8 @@ export class OPFSTransaction implements IOPFSTransaction {
     token?: number | CanonicalKey | ICanonicalKeySegments | ITxOpPredicate,
   ): Promise<void | Readonly<[WALOp | undefined]> | ReadonlyArray<WALOp>> {
     this._assertOpen();
-    if (!token) {
+    // Not `!token`: index 0 is a partial rollback.
+    if (token === undefined) {
       this._settled = true;
       this._ops.length = 0;
       this._onRollback(this.id);
@@ -340,13 +341,14 @@ export class OPFSTransaction implements IOPFSTransaction {
           }
         }
 
-        // Remove in reverse order
+        // Remove in reverse order so earlier indices stay valid during splice.
         const removed: WALOp[] = [];
-        for (const idx of indicesToRemove) {
-          removed.push(Object.freeze(this._ops.splice(idx, 1)[0]));
+        for (let i = indicesToRemove.length - 1; i >= 0; i--) {
+          removed.unshift(Object.freeze(this._ops.splice(indicesToRemove[i], 1)[0]));
         }
 
-        resolve(Object.freeze(removed));
+        // An index always yields a one-element tuple (ITransaction contract).
+        resolve(Object.freeze(typeof token === 'number' ? [removed[0]] : removed));
       } catch {
         // reject(error); // Do not throw an error
         resolve([]);

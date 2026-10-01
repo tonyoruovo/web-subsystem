@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { NetworkManager, type FetchResult } from '../src';
 
@@ -54,14 +54,18 @@ describe('NetworkManager', () => {
       if (fail) throw new Error('network error');
       return ok({ n: 1 });
     };
-    const network = new NetworkManager({ fetchFn, retryDelay: () => 0 });
+    const warn = vi.fn();
+    const network = new NetworkManager({ fetchFn, retryDelay: () => 0, warn: { warn } });
 
     await network.request({ url: '/api', cacheStrategy: 'network-first' });
+    expect(warn).not.toHaveBeenCalled();
     fail = true;
     const res = await network.request({ url: '/api', cacheStrategy: 'network-first', retries: 0 });
 
     expect(res.fromCache).toBe(true);
     expect(res.data).toEqual({ n: 1 });
+    // Serving stale data is degraded behaviour, so it is reported.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('serving cached response'));
   });
 
   it('retries on a retryable status', async () => {

@@ -21,7 +21,7 @@ export default tseslint.config(
       semi: ['error', 'always'],
       'no-trailing-spaces': 'error',
       'eol-last': ['error', 'always'],
-      indent: ['error', 2, { SwitchCase: 1 }],
+      // Prettier owns indentation; ESLint's indent rule disagrees with it on ternaries.
 
       // Strict TypeScript code quality rules
       '@typescript-eslint/no-unused-vars': [

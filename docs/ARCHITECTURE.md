@@ -480,7 +480,7 @@ packages/
   react/                optional adapter (§14.1), considered later
 ```
 
-- Scope name: `@platform/*`. It is a **placeholder until version 0.9**, when the final name is chosen. The current version is `0.0.1`.
+- Scope name: `@platform/*`. It is a **placeholder until M9**, when the final name is chosen. The version stays `0.0.2` until all milestones and the alpha validation are done (docs/PLAN.md §4.1).
 - Each package exports `.` (factory, packet types, state types). Worker entries are separate exports (`./worker`, `./shared-worker`). The package spawns them with `new Worker(new URL('./x.worker.js', import.meta.url), { type: 'module' })`, so bundlers can find them.
 - All packages share one version (fixed versioning).
 - `platform` is the only package with hard `dependencies` on other subsystems. Every other package uses peer dependencies (§7.3).

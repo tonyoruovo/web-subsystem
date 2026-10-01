@@ -1,8 +1,8 @@
 # @platform
 
-> **Status: pre-alpha (`0.0.1`).** The architecture is agreed. The implementation has not started on it yet. Nothing here is ready for production use, and every API shown below may change.
+> **Status: pre-alpha (`0.0.2`).** The architecture is agreed and the kernel (`@platform/core`, milestone M1) is built. The subsystems are not yet ported onto it. Nothing here is ready for production use, and every API shown below may change.
 >
-> `@platform` is a **placeholder name** until version `0.9.0`.
+> `@platform` is a **placeholder name** until milestone M9, when the final name is chosen.
 
 A framework-agnostic **platform runtime** for browser applications. Your app boots it once and hands it the work that must not fail: storage, network calls, authentication, sync, real-time messaging, and the messages between them.
 
@@ -143,21 +143,22 @@ Run a subset with `BROWSERS=chrome,edge pnpm test:browser`.
 
 ## Roadmap
 
-| Milestone | Delivers                                                           | Version |
-| --------- | ------------------------------------------------------------------ | ------- |
-| M0        | Tooling, monorepo, browser test matrix (CI deferred)               | `0.0.2` |
-| M1        | Kernel (`core`)                                                    | `0.1.0` |
-| M2        | Worker hosts and transports                                        | `0.2.0` |
-| M3        | Global State, Queue, Notification Center                           | `0.3.0` |
-| M4        | Pilot: Logger and Consent                                          | `0.4.0` |
-| M5        | Window scope hub                                                   | `0.5.0` |
-| M6        | Crypto and Storage                                                 | `0.6.0` |
-| M7        | Network, Auth, Sync, Realtime                                      | `0.7.0` |
-| M8        | Global scope                                                       | `0.8.0` |
-| M9        | Translation, Settings, Analytics, Design System; final name chosen | `0.9.0` |
-| M10       | Orchestrator, Vue adapter, scaffolder                              | `1.0.0` |
+| Milestone | Delivers                                                           |
+| --------- | ------------------------------------------------------------------ |
+| M0        | Tooling, monorepo, browser test matrix (CI deferred)               |
+| M1        | Kernel (`core`)                                                    |
+| M2        | Worker hosts and transports                                        |
+| M3        | Global State, Queue, Notification Center                           |
+| M4        | Pilot: Logger and Consent                                          |
+| M5        | Window scope hub                                                   |
+| M6        | Crypto and Storage                                                 |
+| M7        | Network, Auth, Sync, Realtime                                      |
+| M8        | Global scope                                                       |
+| M9        | Translation, Settings, Analytics, Design System; final name chosen |
+| M10       | Orchestrator, Vue adapter, scaffolder                              |
+| Alpha     | Validation in real React, Vue, Svelte and Astro apps               |
 
-Details and exit criteria are in [`docs/PLAN.md`](docs/PLAN.md).
+Milestones do not change the version: it stays `0.0.2` until every milestone is complete and alpha tests pass in real React, Vue, Svelte and Astro projects. Details and exit criteria are in [`docs/PLAN.md`](docs/PLAN.md).
 
 ## License
 

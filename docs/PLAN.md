@@ -186,15 +186,13 @@ M5 (hub) and M6/M7 can run in parallel after the pilot. M8 needs Realtime (M7) a
 
 ### 4.1 Versioning
 
-All packages share one version. Each milestone gate releases the next minor version:
+All packages share one version. **Milestone gates do not change the version** (decided 2026-10-01): it stays `0.0.2` until every milestone is complete **and** the alpha validation (§4.2) has passed. The next version is decided then.
 
-| Gate | Version | Note |
-|---|---|---|
-| now | `0.0.1` | |
-| M0 | `0.0.2` | Tooling only. Nothing new to publish. |
-| M1 … M8 | `0.1.0` … `0.8.0` | |
-| M9 | `0.9.0` | All subsystems ported. **The final package name is chosen** and `@platform` is renamed. |
-| M10 | `1.0.0` | First stable release, published under the final name. |
+The `@platform` scope is a placeholder until M9, when the final package name is chosen.
+
+### 4.2 Alpha validation
+
+After M10, the packages are installed into real applications built with **React, Vue, Svelte and Astro**. Each app exercises boot, offline and recovery, cross-tab and cross-subdomain broadcasts, and the framework bindings (the Vue adapter, and the plain `View` contract elsewhere). Findings are fixed before the first release.
 
 ---
 
@@ -216,9 +214,9 @@ All packages share one version. Each milestone gate releases the next minor vers
 | # | Question | Needed by | Answer |
 |---|---|---|---|
 | Q1 | Platforms in scope | M0 | Desktop and mobile (Android, iOS) browsers. In-app WebViews are out. |
-| Q2 | The npm scope name | M0 | `@platform`, a placeholder until `0.9.0`. |
+| Q2 | The npm scope name | M0 | `@platform`, a placeholder until M9. |
 | Q3 | Reference server, or wire protocol only? | M1 | Wire protocol only. |
 | Q4 | The hub origin | M5 | The apex domain. |
 | Q5 | Framework support | M10 | Framework-agnostic core. A Vue adapter first; React to be considered later. |
 | Q6 | Minimum browser versions | M0 | Desktop browsers and Chrome for Android: the last two major versions. iOS and iPadOS (all browsers): 16.4 or later. |
-| Q7 | Is the versioning scheme (§4.1) acceptable? | M0 | Yes. |
+| Q7 | Is the versioning scheme (§4.1) acceptable? | M0 | Revised: no bumps at milestone gates; release after all milestones and alpha validation (§4.2). |

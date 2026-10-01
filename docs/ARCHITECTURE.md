@@ -236,17 +236,42 @@ This one mechanism covers the Logger ring buffer, dead-letter persistence, and G
 A processor is a **pure message-handler module**. It does not know which thread it runs on. A physical host (a worker entry file) and a virtual host (on the main thread) load the **same module**.
 
 ```ts
-interface ProcessorDef {
+interface ProcessorModule<In, Out> {
+  setup?(scope: ProcessorScope): void | Promise<void>;
+  /** Handles one structured-cloneable message and returns the result. */
+  handle(message: In, scope: ProcessorScope): Out | Promise<Out>;
+  teardown?(): void | Promise<void>;
+}
+
+interface ProcessorScope {
+  readonly host: HostKind;
+  /** True when the current slice is over budget (§8.6). */
+  shouldYield(): boolean;
+  /** Gives the thread back to the browser, then continues. */
+  yield(): Promise<void>;
+  /** Sends a one-way message to the owning unit (a Notifier's output). */
+  post(message: unknown): void;
+}
+
+interface ProcessorDef<In, Out> {
   readonly id: string;
   readonly job: 'sink' | 'scheduler' | 'notifier';
-  /** Loads the handler module. The same module runs on every host. */
-  readonly load: () => Promise<ProcessorModule>;
-  /** Hosts in order of preference. The last entry must be virtual. */
-  readonly hosts: readonly HostKind[]; // e.g. ['shared', 'dedicated', 'virtual']
+  /** Hosts in order of preference. The last entry must be 'virtual'. */
+  readonly hosts: readonly HostKind[];
+  /** Loads the module for the virtual host. */
+  readonly load: () => Promise<ProcessorModule<In, Out>>;
+  /** Create the workers. Written at the definition site, so bundlers can see them. */
+  readonly dedicated?: () => Worker;      // new Worker(new URL('./x.worker.ts', import.meta.url), { type: 'module' })
+  readonly shared?: () => SharedWorker;   // new SharedWorker(new URL(...), { type: 'module', name })
 }
 
 type HostKind = 'shared' | 'dedicated' | 'virtual';
 ```
+
+- The worker entry file calls `serveProcessor(module)` from `@platform/core/worker`. It answers the handshake, calls, and heartbeats.
+- Bundlers (Vite, webpack, Rollup) only detect `new Worker(new URL(..., import.meta.url))` written literally. That is why the definition, not the library, creates the worker.
+- Hosts talk to workers over a small request/response protocol (handshake, call, ping, one-way post). The same protocol carries envelopes over `MessageChannel` transports.
+- A unit's processors start before its `init` and stop during teardown. The context exposes them as `ctx.processor(id)`.
 
 ### 8.2 Hosts
 
@@ -267,7 +292,9 @@ Every processor's host list must end with `virtual` (README: "should also define
 3. The handshake does not complete before a timeout.
 4. A shared-worker heartbeat is missed.
 
-Work in progress at failover is re-queued through the Queue. Its fingerprints record the host change. A failed physical host is not retried until the unit restarts.
+Work in progress at failover is re-run once on the next host. From M3, the Queue re-queues it instead. The host change and its cause are recorded on the processor's view. A failed physical host is not retried until the unit restarts.
+
+The heartbeat (trigger 4) is on by default for shared hosts and off for dedicated hosts; both are configurable.
 
 ### 8.4 Jobs
 

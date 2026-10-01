@@ -28,36 +28,3 @@ export const UNITS: ReadonlyArray<keyof DurationRecord> = [
   'seconds',
   'milliseconds',
 ];
-
-// ---------------------------------------------------------------------------
-// Intl.DurationFormat helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Maps our DurationRecord keys to the field names expected by
- * Intl.DurationFormat / Temporal.Duration.
- * Note: decades / centuries / millennia are not part of the Intl spec; they
- * are collapsed into `years` before formatting.
- */
-export const INTL_UNIT_MAP: Partial<Record<keyof DurationRecord, keyof DurationRecord>> = {
-  years: 'years',
-  months: 'months',
-  weeks: 'weeks',
-  days: 'days',
-  hours: 'hours',
-  minutes: 'minutes',
-  seconds: 'seconds',
-  milliseconds: 'milliseconds',
-} as const;
-
-// ---------------------------------------------------------------------------
-// ISO 8601 / RFC 9557 structural parsing (regex - format, not measurement)
-// ---------------------------------------------------------------------------
-
-/**
- * Structural regex covering both RFC 3339 (no weeks) and RFC 9557 (with weeks).
- * Using a single regex keeps parsing DRY; callers enforce the week-field
- * restriction for strict RFC 3339 validation.
- */
-export const ISO_DURATION_RE =
-  /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;

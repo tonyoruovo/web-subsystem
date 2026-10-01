@@ -1,113 +1,210 @@
 /**
  * @fileoverview Concrete implementation of duration operations.
  *
- * @summary This file contains the Duration class, which implements the DurationDefinition interface.
- * Duration parsing uses Intl.DurationFormat and temporal parsing where available,
- * with ISO 8601 / RFC 9557 regex as a structural fallback.
- * Formatting delegates entirely to Intl.DurationFormat.
+ * @summary The Duration class, implemented on top of `Temporal.Duration`.
+ * @description
+ * Every calculation (totals, comparison, calendar arithmetic, balancing,
+ * parsing, serialization and localized formatting) is delegated to
+ * `@js-temporal/polyfill`. The class keeps the {@linkcode DurationRecord}
+ * fields as its public state, so it stays a plain, serializable record.
+ *
+ * Two gaps between a {@linkcode DurationRecord} and a `Temporal.Duration` are
+ * bridged here:
+ *
+ * - **Mixed signs.** A record may hold positive and negative fields at once;
+ *   a `Temporal.Duration` may not. Each record is split into a positive part
+ *   and a negative part, both valid `Temporal.Duration`s, and calculations
+ *   combine them.
+ * - **Extra units and fractions.** `decades`, `centuries` and `millennia` are
+ *   folded into `years`. Fractional fields are spilled into the next smaller
+ *   unit (exactly for weeks and smaller, by 12 for years, and by the average
+ *   month length for months), because Temporal fields must be integers.
+ *
+ * Calendar units (years, months) have no fixed length, so totals, comparisons
+ * and splits are measured from a **reference instant**, in UTC. It defaults to
+ * the moment of the call; pass `relativeTo` to the constructor for
+ * deterministic results.
  */
 
-import {
-  DAY_IN_WEEK,
-  HOUR_IN_DAY,
-  INTL_UNIT_MAP,
-  ISO_DURATION_RE,
-  MIN_IN_HOUR,
-  MS_IN_DAY,
-  MS_IN_MONTH,
-  MS_IN_SEC,
-  MS_IN_YEAR,
-  SEC_IN_MIN,
-  UNITS,
-} from '@/constants';
+import { Temporal } from '@js-temporal/polyfill';
+
+import { AVG_DAYS_IN_MONTH, UNITS } from '@/constants';
 import type { DateLike, DurationDefinition, DurationLike, DurationRecord } from '@/types';
 
-/**
- * Collapses decades / centuries / millennia into `years` so the record is
- * consumable by Intl.DurationFormat (which has no concept of those units).
- */
-function toIntlRecord(record: DurationRecord) {
-  const extraYears =
-    (record.millennia ?? 0) * 1000 + (record.centuries ?? 0) * 100 + (record.decades ?? 0) * 10;
+/** @summary The fields of a `Temporal.Duration`. */
+type TemporalFields = {
+  -readonly [
+    K in
+      | 'years'
+      | 'months'
+      | 'weeks'
+      | 'days'
+      | 'hours'
+      | 'minutes'
+      | 'seconds'
+      | 'milliseconds'
+      | 'microseconds'
+      | 'nanoseconds'
+  ]: number;
+};
 
-  const intl: DurationRecord = {};
+/** @summary Temporal fields from largest to smallest, with the factor to the next smaller unit. */
+const SPILL: ReadonlyArray<[keyof TemporalFields, keyof TemporalFields | null, number]> = [
+  ['years', 'months', 12],
+  ['months', 'days', AVG_DAYS_IN_MONTH],
+  ['weeks', 'days', 7],
+  ['days', 'hours', 24],
+  ['hours', 'minutes', 60],
+  ['minutes', 'seconds', 60],
+  ['seconds', 'milliseconds', 1000],
+  ['milliseconds', 'microseconds', 1000],
+  ['microseconds', 'nanoseconds', 1000],
+  ['nanoseconds', null, 1],
+];
 
-  for (const [key, intlKey] of Object.entries(INTL_UNIT_MAP)) {
-    const k = key as keyof DurationRecord;
-    const v = record[k] ?? 0;
-    if (v !== 0) intl[intlKey] = v;
-  }
+/** @summary Each {@linkcode DurationRecord} unit as a Temporal unit and a multiplier. */
+const AS_TEMPORAL_UNIT: Record<
+  keyof DurationRecord,
+  { unit: Exclude<keyof TemporalFields, 'microseconds' | 'nanoseconds'>; factor: number }
+> = {
+  millennia: { unit: 'years', factor: 1000 },
+  centuries: { unit: 'years', factor: 100 },
+  decades: { unit: 'years', factor: 10 },
+  years: { unit: 'years', factor: 1 },
+  months: { unit: 'months', factor: 1 },
+  weeks: { unit: 'weeks', factor: 1 },
+  days: { unit: 'days', factor: 1 },
+  hours: { unit: 'hours', factor: 1 },
+  minutes: { unit: 'minutes', factor: 1 },
+  seconds: { unit: 'seconds', factor: 1 },
+  milliseconds: { unit: 'milliseconds', factor: 1 },
+};
 
-  if (extraYears) {
-    intl['years'] = (intl['years'] ?? 0) + extraYears;
-  }
-
-  return intl;
+/** @summary Options for a {@linkcode Duration}. */
+export interface DurationOptions {
+  /**
+   * The reference point for calendar units: a `Temporal.ZonedDateTime`, or a
+   * {@linkcode DateLike} interpreted in UTC. Defaults to the moment of each call.
+   */
+  relativeTo?: Temporal.ZonedDateTime | DateLike;
 }
 
-/**
- * Formats a DurationRecord as a human-readable string via Intl.DurationFormat.
- *
- * @param record  - The duration fields to format.
- * @param locale  - BCP 47 locale tag (default: runtime locale).
- * @param style   - Intl.DurationFormat style: "long" | "short" | "narrow" | "digital"
- *                  "long"    -> "2 hours, 30 minutes"
- *                  "short"   -> "2 hr., 30 min."
- *                  "narrow"  -> "2h 30m"   (closest to the old `concise` flag)
- *                  "digital" -> "2:30:00"
- */
-function formatWithIntl(
-  record: DurationRecord,
-  locale: string | undefined,
-  style: Intl.DurationFormatStyle,
-): string {
-  // Intl.DurationFormat omits zero-valued fields automatically.
-  const intlRecord = toIntlRecord(record);
-
-  // Guard: if every field is zero, display "0 seconds" in the requested style.
-  const allZero = Object.values(intlRecord).every((v) => !v);
-  if (allZero) {
-    return new Intl.DurationFormat(locale, { style }).format({ seconds: 0 });
-  }
-
-  return new Intl.DurationFormat(locale, { style }).format(intlRecord);
+/** @summary Converts a {@linkcode DateLike} to a `Temporal.Instant`. */
+function toInstant(date: DateLike): Temporal.Instant {
+  const ms = new Date(date).getTime();
+  if (Number.isNaN(ms)) throw new RangeError(`Invalid date: ${String(date)}`);
+  return Temporal.Instant.fromEpochMilliseconds(ms);
 }
 
-/**
- * Parses an ISO 8601 / RFC 9557 duration string into a DurationRecord.
- * Milliseconds are extracted from the fractional part of the seconds designator.
- *
- * Using Intl.DurationFormat for *parsing* is not yet part of the spec
- * (formatToParts goes the other direction). The regex remains here as the
- * correct tool for *structural* ISO string parsing.
- */
-function parseISOString(input: string, allowWeeks: boolean = true): DurationRecord {
-  const matches = input.match(ISO_DURATION_RE);
-  if (!matches) throw new Error(`Invalid ISO 8601 duration string: "${input}"`);
-
-  const [, rawYears, rawMonths, rawWeeks, rawDays, rawHours, rawMinutes, rawSeconds] = matches.map(
-    (v) => (v != null ? parseFloat(v) : undefined),
+/** @summary Builds a `Temporal.Duration` from fields. Unlike `Duration.from`, it accepts all zeros. */
+function temporalOf(f: Partial<TemporalFields>): Temporal.Duration {
+  return new Temporal.Duration(
+    f.years,
+    f.months,
+    f.weeks,
+    f.days,
+    f.hours,
+    f.minutes,
+    f.seconds,
+    f.milliseconds,
+    f.microseconds,
+    f.nanoseconds,
   );
+}
 
-  if (!allowWeeks && rawWeeks != null) {
-    throw new Error('Weeks designator "W" is not valid in RFC 3339 duration strings.');
-  }
-
-  const record: DurationRecord = {
-    years: rawYears || undefined,
-    months: rawMonths || undefined,
-    weeks: rawWeeks || undefined,
-    days: rawDays || undefined,
-    hours: rawHours || undefined,
-    minutes: rawMinutes || undefined,
+/**
+ * @summary Converts a record to integer Temporal fields.
+ * @description Folds decades, centuries and millennia into years, then spills
+ * every fractional part into the next smaller unit. `Math.trunc` keeps each
+ * spilled part on the same sign as its field.
+ */
+function toTemporalFields(record: DurationRecord): TemporalFields {
+  const fields: TemporalFields = {
+    years:
+      (record.millennia ?? 0) * 1000 +
+      (record.centuries ?? 0) * 100 +
+      (record.decades ?? 0) * 10 +
+      (record.years ?? 0),
+    months: record.months ?? 0,
+    weeks: record.weeks ?? 0,
+    days: record.days ?? 0,
+    hours: record.hours ?? 0,
+    minutes: record.minutes ?? 0,
+    seconds: record.seconds ?? 0,
+    milliseconds: record.milliseconds ?? 0,
+    microseconds: 0,
+    nanoseconds: 0,
   };
-
-  if (rawSeconds != null && rawSeconds !== 0) {
-    record.seconds = Math.floor(rawSeconds);
-    record.milliseconds = Math.round((rawSeconds % 1) * 1000) || undefined;
+  for (const [unit, next, factor] of SPILL) {
+    const value = fields[unit];
+    if (next === null) {
+      fields[unit] = Math.round(value);
+      continue;
+    }
+    const whole = Math.trunc(value);
+    fields[unit] = whole;
+    fields[next] += (value - whole) * factor;
   }
+  return fields;
+}
 
+/**
+ * @summary Splits a record into its positive and negative parts.
+ * @returns Two non-negative `Temporal.Duration`s. The record equals `positive - negative`.
+ */
+function toParts(record: DurationRecord): {
+  positive: Temporal.Duration;
+  negative: Temporal.Duration;
+} {
+  const fields = toTemporalFields(record);
+  const positive: Partial<TemporalFields> = {};
+  const negative: Partial<TemporalFields> = {};
+  for (const key of Object.keys(fields) as (keyof TemporalFields)[]) {
+    const value = fields[key];
+    if (value > 0) positive[key] = value;
+    else if (value < 0) negative[key] = -value;
+  }
+  return { positive: temporalOf(positive), negative: temporalOf(negative) };
+}
+
+/**
+ * @summary Converts a `Temporal.Duration` to a record with only its non-zero fields.
+ * @description Microseconds and nanoseconds become the fraction of `milliseconds`.
+ */
+function fromTemporal(duration: Temporal.Duration): DurationRecord {
+  const record: DurationRecord = {};
+  const keys = [
+    'years',
+    'months',
+    'weeks',
+    'days',
+    'hours',
+    'minutes',
+    'seconds',
+    'milliseconds',
+  ] as const;
+  for (const key of keys) if (duration[key] !== 0) record[key] = duration[key];
+  const subMillis = duration.microseconds / 1e3 + duration.nanoseconds / 1e6;
+  if (subMillis !== 0) record.milliseconds = (record.milliseconds ?? 0) + subMillis;
   return record;
+}
+
+/**
+ * @summary Parses an ISO 8601 / RFC 9557 duration string with Temporal.
+ * @param {string} input The duration string.
+ * @param {boolean} allowWeeks `false` rejects the `W` designator (RFC 3339).
+ */
+function parseISOString(input: string, allowWeeks: boolean): DurationRecord {
+  let duration: Temporal.Duration;
+  try {
+    duration = Temporal.Duration.from(input);
+  } catch (cause) {
+    throw new RangeError(`Invalid ISO 8601 duration string: "${input}"`, { cause });
+  }
+  if (!allowWeeks && duration.weeks !== 0) {
+    throw new RangeError('Weeks designator "W" is not valid in RFC 3339 duration strings.');
+  }
+  return fromTemporal(duration);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,126 +212,120 @@ function parseISOString(input: string, allowWeeks: boolean = true): DurationReco
 // ---------------------------------------------------------------------------
 
 /**
- * @summary Concrete implementation of duration operations.
+ * @summary Concrete implementation of duration operations, backed by `Temporal.Duration`.
  * @description
- * This class provides a full-featured implementation of the IDuration interface, offering methods for
- * creating, manipulating, and converting durations. It uses the DurationRecord structure internally
- * and provides static factory methods for easy instantiation from various sources.
- *
- * The "why" is to have a ready-to-use duration class that handles all common operations, normalization,
- * and serialization. The "how" involves maintaining state as optional number properties and using
- * private methods for calculations, with public methods for user interactions.
+ * Provides creation, arithmetic, comparison, conversion, serialization and
+ * localized formatting of durations. Its public fields are a
+ * {@linkcode DurationRecord}; the reference instant for calendar units is kept
+ * private, so `toJSON()` and `Object.keys()` only see the record.
  *
  * @example
  * ```ts
- * // Creating and using durations
  * const duration = new Duration({ hours: 2, minutes: 30 });
- * console.log(duration.toHumanReadableString()); // "2 hours, 30 minutes"
- * const added = duration.add({ minutes: 45 });
- * console.log(added.normalize()); // Normalized result
+ * duration.toHumanReadableString(); // "2 hours, 30 minutes"
+ * duration.add({ minutes: 45 }).normalize(); // { hours: 3, minutes: 15 }
  * ```
  * @example
  * ```ts
- * // In game development for timers
- * const gameTimer = Duration.fromSeconds(120);
- * setInterval(() => {
- *   if (!gameTimer.isZero()) {
- *     gameTimer.subtract({ seconds: 1 });
- *     console.log(gameTimer.toHumanReadableString({ concise: true }));
- *   }
- * }, 1000);
- * ```
- * @example
- * ```ts
- * // In physics simulations for time steps
- * const timeStep = new Duration({ milliseconds: 16 });
- * let simulationTime = new Duration();
- * while (simulationTime.getTotalMilliseconds() < 10000) {
- *   // Run simulation step
- *   simulationTime = simulationTime.add(timeStep);
- * }
+ * // Calendar-exact totals: pass the reference point.
+ * new Duration({ months: 1 }, { relativeTo: '2025-02-01' }).normalize('days'); // { days: 28 }
  * ```
  * @example
  * ```ts
  * // Serializing for save files
- * const saveData = { lastPlayed: new Duration({ days: 5 }).toISO8601() };
- * // Later: Duration.fromISO8601(saveData.lastPlayed)
+ * const saved = new Duration({ days: 5 }).toISO8601(); // "P5D"
+ * Duration.fromISO8601(saved);
  * ```
- * Edge cases include:
- * - Negative values in operations: Subtraction clamps to zero.
- * - Very large durations: Uses BigInt internally for calculations if needed.
- * - Fractional units: Handled in normalization and serialization.
- * - Zero durations: Special handling in string representations.
  *
- * Exceptions and errors: Methods throw for invalid inputs (e.g., negative divisors in divide).
- * All methods that take a `DurationLike` type as argument may throw if
- * passed a stateless `IDuration`, as this is illegal
+ * Edge cases:
+ * - Subtraction clamps each field at zero.
+ * - Fractional fields are spilled into smaller units before calculations.
+ * - A record with mixed signs is valid; `toTemporal()` and `toISO8601()`
+ *   throw a `RangeError` for it, because ISO 8601 has no mixed-sign form.
  *
  * @see {@link IDuration} For the interface it implements.
- * @see {@link DurationRecord} For the internal data structure.
+ * @see {@link DurationRecord} For the data structure.
  * @see RFC 3339 and RFC 9557 for supported string formats.
  */
 export class Duration implements DurationDefinition {
-  milliseconds?: number;
-  seconds?: number;
-  minutes?: number;
-  hours?: number;
-  days?: number;
-  weeks?: number;
-  months?: number;
-  years?: number;
-  decades?: number;
-  centuries?: number;
-  millennia?: number;
+  declare milliseconds?: number;
+  declare seconds?: number;
+  declare minutes?: number;
+  declare hours?: number;
+  declare days?: number;
+  declare weeks?: number;
+  declare months?: number;
+  declare years?: number;
+  declare decades?: number;
+  declare centuries?: number;
+  declare millennia?: number;
 
-  constructor(initialState: DurationRecord = {}) {
-    Object.assign(this, initialState);
+  /** @internal The reference point for calendar units, or `undefined` for "now". */
+  readonly #relativeTo?: Temporal.ZonedDateTime;
+
+  constructor(initialState: DurationRecord = {}, options: DurationOptions = {}) {
+    for (const unit of UNITS) {
+      if (initialState[unit] !== undefined) this[unit] = initialState[unit];
+    }
+    const { relativeTo } = options;
+    if (relativeTo !== undefined) {
+      this.#relativeTo =
+        relativeTo instanceof Temporal.ZonedDateTime
+          ? relativeTo
+          : toInstant(relativeTo).toZonedDateTimeISO('UTC');
+    }
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
-  private _toTotalMillis(): number {
-    const years =
-      (this.millennia ?? 0) * 1000 +
-      (this.centuries ?? 0) * 100 +
-      (this.decades ?? 0) * 10 +
-      (this.years ?? 0);
+  /** @internal Creates a duration that shares this one's reference point. */
+  private _derive(record: DurationRecord): Duration {
+    return new Duration(record, { relativeTo: this.#relativeTo });
+  }
 
-    return (
-      (this.milliseconds ?? 0) +
-      (this.seconds ?? 0) * MS_IN_SEC +
-      (this.minutes ?? 0) * SEC_IN_MIN * MS_IN_SEC +
-      (this.hours ?? 0) * MIN_IN_HOUR * SEC_IN_MIN * MS_IN_SEC +
-      (this.days ?? 0) * HOUR_IN_DAY * MIN_IN_HOUR * SEC_IN_MIN * MS_IN_SEC +
-      (this.weeks ?? 0) * DAY_IN_WEEK * HOUR_IN_DAY * MIN_IN_HOUR * SEC_IN_MIN * MS_IN_SEC +
-      (this.months ?? 0) * MS_IN_MONTH +
-      years * MS_IN_YEAR
-    );
+  /** @internal The reference point for calendar units. */
+  private _anchor(): Temporal.ZonedDateTime {
+    return this.#relativeTo ?? Temporal.Now.zonedDateTimeISO('UTC');
+  }
+
+  /** @internal The instant reached by applying this duration to `anchor`. */
+  private _endFrom(anchor: Temporal.ZonedDateTime): Temporal.ZonedDateTime {
+    const { positive, negative } = toParts(this);
+    return anchor.add(positive).subtract(negative);
+  }
+
+  /** @internal The total length in `unit`, measured from the reference point. */
+  private _total(unit: keyof DurationRecord): number {
+    const { unit: temporalUnit, factor } = AS_TEMPORAL_UNIT[unit];
+    const relativeTo = this._anchor();
+    const { positive, negative } = toParts(this);
+    const total =
+      positive.total({ unit: temporalUnit, relativeTo }) -
+      negative.total({ unit: temporalUnit, relativeTo });
+    return total / factor;
+  }
+
+  // ── Temporal interop ──────────────────────────────────────────────────────
+
+  /**
+   * @summary Returns this duration as a `Temporal.Duration`.
+   * @throws {RangeError} When the fields have mixed signs.
+   */
+  toTemporal(): Temporal.Duration {
+    return temporalOf(toTemporalFields(this));
   }
 
   // ── Standard methods ──────────────────────────────────────────────────────
 
   toDate(fromDate: DateLike = new Date(), direction: 'future' | 'past' = 'future'): Date {
-    const result = new Date(fromDate);
-    const sign = direction === 'future' ? 1 : -1;
-
-    const years =
-      (this.millennia ?? 0) * 1000 +
-      (this.centuries ?? 0) * 100 +
-      (this.decades ?? 0) * 10 +
-      (this.years ?? 0);
-
-    if (years) result.setFullYear(result.getFullYear() + sign * years);
-    if (this.months) result.setMonth(result.getMonth() + sign * this.months);
-    if (this.weeks) result.setDate(result.getDate() + sign * this.weeks * 7);
-    if (this.days) result.setDate(result.getDate() + sign * this.days);
-    if (this.hours) result.setHours(result.getHours() + sign * this.hours);
-    if (this.minutes) result.setMinutes(result.getMinutes() + sign * this.minutes);
-    if (this.seconds) result.setSeconds(result.getSeconds() + sign * this.seconds);
-    if (this.milliseconds)
-      result.setMilliseconds(result.getMilliseconds() + sign * this.milliseconds);
-
-    return result;
+    // The system time zone matches the local-time semantics of `Date`.
+    const start = toInstant(fromDate).toZonedDateTimeISO(Temporal.Now.timeZoneId());
+    const { positive, negative } = toParts(this);
+    const end =
+      direction === 'future'
+        ? start.add(positive).subtract(negative)
+        : start.subtract(positive).add(negative);
+    return new Date(end.epochMilliseconds);
   }
 
   ago(fromDate: DateLike = new Date()): Date {
@@ -248,99 +339,76 @@ export class Duration implements DurationDefinition {
   }
 
   normalize(targetUnit?: keyof DurationRecord, options?: { approximate: boolean }): Duration {
-    const totalMillis = this._toTotalMillis();
-    const approximate = options?.approximate ?? false;
-
     if (targetUnit) {
-      const divisors: Record<keyof DurationRecord, number> = {
-        millennia: MS_IN_YEAR * 1000,
-        centuries: MS_IN_YEAR * 100,
-        decades: MS_IN_YEAR * 10,
-        years: MS_IN_YEAR,
-        months: MS_IN_MONTH,
-        weeks: MS_IN_DAY * 7,
-        days: MS_IN_DAY,
-        hours: MS_IN_DAY / 24,
-        minutes: MS_IN_SEC * 60,
-        seconds: MS_IN_SEC,
-        milliseconds: 1,
-      };
-      const totalValue = totalMillis / divisors[targetUnit];
-      return new Duration({ [targetUnit]: approximate ? Math.round(totalValue) : totalValue });
+      const total = this._total(targetUnit);
+      return this._derive({ [targetUnit]: options?.approximate ? Math.round(total) : total });
     }
 
-    const d = new Duration(this);
-    if (d.milliseconds && d.milliseconds >= MS_IN_SEC) {
-      d.seconds = (d.seconds ?? 0) + Math.floor(d.milliseconds / MS_IN_SEC);
-      d.milliseconds %= MS_IN_SEC;
+    // Balance the time part (days and smaller) with Temporal, then days into
+    // weeks. Calendar units are left as they are.
+    const time = toParts({
+      days: this.days,
+      hours: this.hours,
+      minutes: this.minutes,
+      seconds: this.seconds,
+      milliseconds: this.milliseconds,
+    });
+    const balanced = time.positive.subtract(time.negative).round({ largestUnit: 'days' });
+    const weeks = Math.trunc(balanced.days / 7);
+
+    const result: DurationRecord = {
+      millennia: this.millennia,
+      centuries: this.centuries,
+      decades: this.decades,
+      years: this.years,
+      months: this.months,
+      weeks: (this.weeks ?? 0) + weeks,
+      ...fromTemporal(balanced.with({ days: balanced.days - weeks * 7 })),
+    };
+    // Keep zero fields only where this duration defined them.
+    for (const unit of UNITS) {
+      if (result[unit] === 0 && this[unit] === undefined) delete result[unit];
+      if (result[unit] === undefined && this[unit] !== undefined) result[unit] = 0;
     }
-    if (d.seconds && d.seconds >= SEC_IN_MIN) {
-      d.minutes = (d.minutes ?? 0) + Math.floor(d.seconds / SEC_IN_MIN);
-      d.seconds %= SEC_IN_MIN;
-    }
-    if (d.minutes && d.minutes >= MIN_IN_HOUR) {
-      d.hours = (d.hours ?? 0) + Math.floor(d.minutes / MIN_IN_HOUR);
-      d.minutes %= MIN_IN_HOUR;
-    }
-    if (d.hours && d.hours >= HOUR_IN_DAY) {
-      d.days = (d.days ?? 0) + Math.floor(d.hours / HOUR_IN_DAY);
-      d.hours %= HOUR_IN_DAY;
-    }
-    if (d.days && d.days >= DAY_IN_WEEK) {
-      d.weeks = (d.weeks ?? 0) + Math.floor(d.days / DAY_IN_WEEK);
-      d.days %= DAY_IN_WEEK;
-    }
-    return d;
+    return this._derive(result);
   }
 
   /**
-   * Returns a locale-aware human-readable string via Intl.DurationFormat.
+   * Returns a locale-aware human-readable string via `Temporal.Duration#toLocaleString`.
    *
    * @param options.locale  - BCP 47 locale (default: runtime locale).
-   * @param options.concise - true  -> "narrow" style  ("2h 30m")
-   *                          false -> "long"   style  ("2 hours, 30 minutes")
-   *
-   * Replaces the old hand-rolled unit-label loop entirely. Decades, centuries,
-   * and millennia are collapsed into years before handing off to Intl, since
-   * those units are outside the Intl.DurationFormat spec.
+   * @param options.concise - `true` -> "narrow" style ("2h 30m"),
+   *                          `false` -> "long" style ("2 hours, 30 minutes").
    */
   toHumanReadableString(options?: { locale?: string; concise?: boolean }): string {
     const { locale, concise = false } = options ?? {};
-    return formatWithIntl(this, locale, concise ? 'narrow' : 'long');
+    return this.formatIntl(locale, concise ? 'narrow' : 'long');
   }
 
   /**
-   * Formats the duration with full Intl.DurationFormat style control.
-   * Prefer this over toHumanReadableString when you need "short" or "digital".
+   * Formats the duration with full `Intl.DurationFormat` style control.
    *
    * @example
    * new Duration({ hours: 1, minutes: 30 }).formatIntl('en', 'digital'); // "1:30:00"
    * new Duration({ hours: 1, minutes: 30 }).formatIntl('de', 'long');    // "1 Stunde und 30 Minuten"
    */
   formatIntl(locale?: string, style: Intl.DurationFormatStyle = 'long'): string {
-    return formatWithIntl(this, locale, style);
+    const duration = this.toTemporal();
+    // A zero duration would format as "", so always show the seconds for it.
+    // Temporal types the options loosely; they are passed to Intl.DurationFormat.
+    const options: Intl.DurationFormatOptions & Record<string, unknown> = duration.blank
+      ? { style, secondsDisplay: 'always' }
+      : { style };
+    return duration.toLocaleString(locale, options);
   }
 
   roundTo(unit: keyof DurationRecord): Duration {
-    const divisors: Record<keyof DurationRecord, number> = {
-      millennia: MS_IN_YEAR * 1000,
-      centuries: MS_IN_YEAR * 100,
-      decades: MS_IN_YEAR * 10,
-      years: MS_IN_YEAR,
-      months: MS_IN_MONTH,
-      weeks: MS_IN_DAY * 7,
-      days: MS_IN_DAY,
-      hours: MS_IN_DAY / 24,
-      minutes: MS_IN_SEC * 60,
-      seconds: MS_IN_SEC,
-      milliseconds: 1,
-    };
-    return new Duration({ [unit]: Math.round(this._toTotalMillis() / divisors[unit]) });
+    return this._derive({ [unit]: Math.round(this._total(unit)) });
   }
 
   /**
    * Formats the duration using a custom token pattern.
-   * Tokens: Y M W D H m s ms  (unchanged from the original API).
+   * Tokens: Y M W D H m s ms.
    *
    * For locale-aware output prefer toHumanReadableString() / formatIntl().
    */
@@ -359,124 +427,118 @@ export class Duration implements DurationDefinition {
   }
 
   split(unit: keyof DurationRecord): Duration[] {
-    const unitMs: Record<keyof DurationRecord, number> = {
-      millennia: MS_IN_YEAR * 1000,
-      centuries: MS_IN_YEAR * 100,
-      decades: MS_IN_YEAR * 10,
-      years: MS_IN_YEAR,
-      months: MS_IN_MONTH,
-      weeks: MS_IN_DAY * 7,
-      days: MS_IN_DAY,
-      hours: MS_IN_DAY / 24,
-      minutes: MS_IN_SEC * 60,
-      seconds: MS_IN_SEC,
-      milliseconds: 1,
-    };
-    const totalMillis = this._toTotalMillis();
-    const chunkMs = unitMs[unit];
-    const count = Math.floor(totalMillis / chunkMs);
-    const remainder = totalMillis % chunkMs;
+    if (this.isNegative()) throw new RangeError('Cannot split a negative duration.');
+    const { unit: temporalUnit, factor } = AS_TEMPORAL_UNIT[unit];
+    const anchor = this._anchor();
+    const end = this._endFrom(anchor);
+    const count = Math.floor(this._total(unit));
+    const afterChunks = anchor.add({ [temporalUnit]: count * factor });
+    const remainder = end.epochMilliseconds - afterChunks.epochMilliseconds;
 
-    const chunks = Array<Duration>(count).fill(new Duration({ [unit]: 1 }));
-    if (remainder > 0) chunks.push(new Duration({ milliseconds: remainder }));
+    const chunks = Array.from({ length: count }, () => this._derive({ [unit]: 1 }));
+    if (remainder > 0) chunks.push(this._derive({ milliseconds: remainder }));
     return chunks;
   }
 
   add(other: DurationLike): Duration {
     const duration = Duration.fromDurationLike(other);
     const newState: DurationRecord = {};
-    const allKeys = new Set([...Object.keys(this), ...Object.keys(duration)]) as Set<
-      keyof DurationRecord
-    >;
-    allKeys.forEach((key) => {
-      newState[key] = (this[key] ?? 0) + (duration[key] ?? 0);
-    });
-    return new Duration(newState).normalize();
+    for (const unit of UNITS) {
+      if (this[unit] !== undefined || duration[unit] !== undefined) {
+        newState[unit] = (this[unit] ?? 0) + (duration[unit] ?? 0);
+      }
+    }
+    return this._derive(newState).normalize();
   }
 
   subtract(other: DurationLike): Duration {
     const duration = Duration.fromDurationLike(other);
     const newState: DurationRecord = {};
-    const allKeys = new Set([...Object.keys(this), ...Object.keys(duration)]) as Set<
-      keyof DurationRecord
-    >;
-    allKeys.forEach((key) => {
-      newState[key] = Math.max(0, (this[key] ?? 0) - (duration[key] ?? 0));
-    });
-    return new Duration(newState);
+    for (const unit of UNITS) {
+      if (this[unit] !== undefined || duration[unit] !== undefined) {
+        newState[unit] = Math.max(0, (this[unit] ?? 0) - (duration[unit] ?? 0));
+      }
+    }
+    return this._derive(newState);
   }
 
   equals(other: DurationLike): boolean {
     try {
-      return this._toTotalMillis() === Duration.fromDurationLike(other)._toTotalMillis();
+      return this.compareTo(other) === 0;
     } catch {
       return false;
     }
   }
 
   clone(): Duration {
-    return new Duration(this);
+    return this._derive(this);
   }
+
   isZero(): boolean {
-    return this._toTotalMillis() === 0;
+    const { positive, negative } = toParts(this);
+    return positive.blank && negative.blank;
   }
   isNegative(): boolean {
-    return this._toTotalMillis() < 0;
+    return !toParts(this).negative.blank;
   }
   isPositive(): boolean {
-    return this._toTotalMillis() > 0;
+    const { positive, negative } = toParts(this);
+    return !positive.blank && negative.blank;
   }
 
   multiply(factor: number): Duration {
     if (factor < 0) throw new Error('Factor must be a non-negative number.');
-    return Duration.fromMilliseconds(this._toTotalMillis() * factor).normalize();
+    const newState: DurationRecord = {};
+    for (const unit of UNITS) if (this[unit] !== undefined) newState[unit] = this[unit] * factor;
+    return this._derive(newState).normalize();
   }
 
   divide(divisor: number): Duration {
     if (divisor <= 0) throw new Error('Divisor must be a positive number.');
-    return Duration.fromMilliseconds(this._toTotalMillis() / divisor).normalize();
+    const newState: DurationRecord = {};
+    for (const unit of UNITS) if (this[unit] !== undefined) newState[unit] = this[unit] / divisor;
+    return this._derive(newState).normalize();
   }
 
   compareTo(other: DurationLike): -1 | 0 | 1 {
-    const diff = this._toTotalMillis() - Duration.fromDurationLike(other)._toTotalMillis();
-    return diff < 0 ? -1 : diff > 0 ? 1 : 0;
+    const anchor = this._anchor();
+    return Temporal.ZonedDateTime.compare(
+      this._endFrom(anchor),
+      Duration.fromDurationLike(other)._endFrom(anchor),
+    );
   }
 
+  /**
+   * Converts this duration to an ISO 8601 duration string.
+   *
+   * - `RFC9557` (Temporal's format): every field, fractional seconds, and weeks.
+   * - `RFC3339` (default): weeks are folded into days and seconds are whole,
+   *   because RFC 3339's grammar allows neither weeks with other units nor fractions.
+   *
+   * @throws {RangeError} When the fields have mixed signs.
+   */
   toISO8601(options?: { format?: 'RFC3339' | 'RFC9557' }): string {
     const { format = 'RFC3339' } = options ?? {};
-    let datePart = '';
-    let timePart = '';
-
-    if (this.years) datePart += `${Math.floor(this.years)}Y`;
-    if (this.months) datePart += `${Math.floor(this.months)}M`;
-    if (format === 'RFC9557' && this.weeks) datePart += `${Math.floor(this.weeks)}W`;
-    if (this.days) datePart += `${Math.floor(this.days)}D`;
-
-    if (this.hours || this.minutes || this.seconds || this.milliseconds) {
-      if (this.hours) timePart += `${Math.floor(this.hours)}H`;
-      if (this.minutes) timePart += `${Math.floor(this.minutes)}M`;
-      if (this.seconds || this.milliseconds) {
-        const totalSeconds = (this.seconds ?? 0) + (this.milliseconds ?? 0) / 1000;
-        timePart += `${Math.floor(totalSeconds)}S`;
-      }
-    }
-
-    return datePart || timePart ? `P${datePart}${timePart ? 'T' + timePart : ''}` : 'PT0S';
+    const duration = this.toTemporal();
+    if (format === 'RFC9557') return duration.toString();
+    return duration
+      .with({ weeks: 0, days: duration.days + duration.weeks * 7 })
+      .toString({ fractionalSecondDigits: 0, roundingMode: 'trunc' });
   }
 
   // ── Getters ───────────────────────────────────────────────────────────────
 
   getTotalMilliseconds(): number {
-    return this._toTotalMillis();
+    return this._total('milliseconds');
   }
   getTotalSeconds(): number {
-    return this._toTotalMillis() / MS_IN_SEC;
+    return this._total('seconds');
   }
   getTotalMinutes(): number {
-    return this._toTotalMillis() / (MS_IN_SEC * SEC_IN_MIN);
+    return this._total('minutes');
   }
   getTotalHours(): number {
-    return this._toTotalMillis() / (MS_IN_SEC * SEC_IN_MIN * MIN_IN_HOUR);
+    return this._total('hours');
   }
 
   isGreaterThan(other: DurationLike): boolean {
@@ -490,13 +552,7 @@ export class Duration implements DurationDefinition {
 
   toJSON(): DurationRecord {
     const state: DurationRecord = {};
-    for (const key in this) {
-      if (Object.prototype.hasOwnProperty.call(this, key) && typeof this[key] !== 'function') {
-        state[key as unknown as keyof DurationRecord] = (this as DurationRecord)[
-          key as keyof DurationRecord
-        ];
-      }
-    }
+    for (const unit of UNITS) if (this[unit] !== undefined) state[unit] = this[unit];
     return state;
   }
 
@@ -508,18 +564,13 @@ export class Duration implements DurationDefinition {
   }
 
   trunc(unitOrLevels?: keyof DurationRecord | number): Duration {
-    if (typeof unitOrLevels === 'string') {
-      const newDuration = this.clone();
-      const targetIndex = UNITS.indexOf(unitOrLevels);
-      for (let i = targetIndex + 1; i < UNITS.length; i++) delete newDuration[UNITS[i]];
-      return newDuration;
-    }
+    if (typeof unitOrLevels === 'string') return this.floor(unitOrLevels);
 
     const levels = unitOrLevels ?? 0;
     const newDuration = this.clone();
     const msIndex = UNITS.findIndex((u) => newDuration[u] && newDuration[u] !== 0);
 
-    if (msIndex === -1) return new Duration({});
+    if (msIndex === -1) return this._derive({});
 
     const startIndex = levels < 0 ? Math.max(0, msIndex + levels) : msIndex;
     const endIndex = levels > 0 ? Math.min(UNITS.length - 1, msIndex + levels) : msIndex;
@@ -555,69 +606,52 @@ export class Duration implements DurationDefinition {
     return new Duration({ seconds });
   }
 
+  /** Creates a duration from a `Temporal.Duration`. */
+  static fromTemporal(duration: Temporal.Duration): Duration {
+    return new Duration(fromTemporal(duration));
+  }
+
+  /**
+   * The calendar-exact distance between two dates, always non-negative,
+   * from years down to milliseconds. Measured in UTC.
+   */
   static between(date1: DateLike, date2: DateLike): Duration {
-    const [lhs, rhs] = [new Date(date1), new Date(date2)];
-    let diff = Math.abs(lhs.getTime() - rhs.getTime());
-    const state: DurationRecord = {};
-
-    state.years = Math.floor(diff / MS_IN_YEAR);
-    diff %= MS_IN_YEAR;
-    state.months = Math.floor(diff / MS_IN_MONTH);
-    diff %= MS_IN_MONTH;
-    state.days = Math.floor(diff / MS_IN_DAY);
-    diff %= MS_IN_DAY;
-    state.hours = Math.floor(diff / (MS_IN_SEC * SEC_IN_MIN * MIN_IN_HOUR));
-    diff %= MS_IN_SEC * SEC_IN_MIN * MIN_IN_HOUR;
-    state.minutes = Math.floor(diff / (MS_IN_SEC * SEC_IN_MIN));
-    diff %= MS_IN_SEC * SEC_IN_MIN;
-    state.seconds = Math.floor(diff / MS_IN_SEC);
-    state.milliseconds = diff % MS_IN_SEC;
-
-    return new Duration(state);
+    const [a, b] = [toInstant(date1), toInstant(date2)];
+    const [start, end] = Temporal.Instant.compare(a, b) <= 0 ? [a, b] : [b, a];
+    const difference = start
+      .toZonedDateTimeISO('UTC')
+      .until(end.toZonedDateTimeISO('UTC'), { largestUnit: 'years' });
+    return new Duration(fromTemporal(difference), { relativeTo: start.toZonedDateTimeISO('UTC') });
   }
 
-  /**
-   * Parses an ISO 8601 duration string (RFC 9557 superset - weeks allowed).
-   * Delegates structural parsing to parseISOString(); Intl.DurationFormat does
-   * not expose a parse API, so the regex remains the correct tool here.
-   */
+  /** Parses an ISO 8601 duration string (RFC 9557 superset: weeks and fractions allowed). */
   static fromISO8601(isoString: string): Duration {
-    return new Duration(parseISOString(isoString, /* allowWeeks */ true));
+    return new Duration(parseISOString(isoString, true));
   }
 
-  /**
-   * Parses an RFC 3339 duration string (no weeks designator).
-   */
+  /** Parses an RFC 3339 duration string (no weeks designator). */
   static fromRFC3339(rfc3339String: string): Duration {
-    return new Duration(parseISOString(rfc3339String, /* allowWeeks */ false));
+    return new Duration(parseISOString(rfc3339String, false));
   }
 
-  /**
-   * Parses an RFC 9557 duration string (weeks designator allowed).
-   */
+  /** Parses an RFC 9557 duration string (weeks designator allowed). */
   static fromRFC9557(rfc9557String: string): Duration {
-    return new Duration(parseISOString(rfc9557String, /* allowWeeks */ true));
+    return new Duration(parseISOString(rfc9557String, true));
   }
 
   /**
    * Converts any DurationLike value to a Duration instance.
-   * String inputs are tried as RFC 9557 -> RFC 3339 -> Date constructor,
-   * consistent with the original cascade but now sharing the single
-   * parseISOString() implementation.
+   * String inputs are tried as RFC 9557, then as a Date constructor argument.
    */
-  static fromDurationLike(d: DurationLike): Duration {
+  static fromDurationLike(d: DurationLike | Temporal.Duration): Duration {
     if (d instanceof Duration) return d;
+    if (d instanceof Temporal.Duration) return Duration.fromTemporal(d);
     if (typeof d === 'number') return Duration.fromMilliseconds(d);
     if (d instanceof Date) return Duration.fromMilliseconds(d.getTime());
 
     if (typeof d === 'string') {
       try {
         return Duration.fromRFC9557(d);
-      } catch {
-        /* fall through */
-      }
-      try {
-        return Duration.fromRFC3339(d);
       } catch {
         /* fall through */
       }
@@ -655,10 +689,7 @@ export class Duration implements DurationDefinition {
     }
   }
 
-  /**
-   * Extracts a single component from an RFC 3339 duration string.
-   * Uses parseISOString() internally - no duplicate regex.
-   */
+  /** Extracts a single component from an RFC 3339 duration string. */
   static parseComponentFromRFC3339(
     input: string,
     component: keyof DurationRecord,

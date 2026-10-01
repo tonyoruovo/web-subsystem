@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
-import { contextOptionsFor, selectInstallations } from './playwright.config';
+import { contextOptionsFor, selectInstallations } from './playwright.config.ts';
 
 const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) };
 

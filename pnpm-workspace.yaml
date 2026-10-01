@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+# unrs-resolver (used by eslint-plugin-import-x) ships prebuilt binaries;
+# its install script is not needed.
+allowBuilds:
+  unrs-resolver: false

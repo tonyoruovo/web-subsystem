@@ -1,8 +1,8 @@
 {
   "name": "web-subsystem",
   "version": "0.0.1",
+  "private": true,
   "description": "A library for building web subsystems with TypeScript.",
-  "main": "index.js",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p .",

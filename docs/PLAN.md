@@ -11,6 +11,9 @@
 2. **Kernel first.** No subsystem is built or ported until the `Unit` contract exists and one pilot subsystem has proved it.
 3. **Port, don't rewrite.** The existing classes in `src/managers/` are tested domain logic. They become the processors and features of the new subsystems. The kernel adds identity, lifecycle, packets, and scopes around them.
 4. **Every milestone ends green:** type-check, lint, unit tests, and (from M2 on) browser tests all pass, and the documents match the code.
+5. **Every package is documented when it is created.**
+   - The package has a `README.md` covering its purpose, installation and peer dependencies, entry points, and usage with examples.
+   - The code follows the JSDoc conventions: every file, including barrel (`index.ts`) files, opens with a `@fileoverview`. Every declaration (functions, classes, interfaces, type aliases and constants) has a `@summary`, a `@description`, examples where non-trivial, and the relevant `@template`, `@param`, `@returns`, `@throws` and access tags.
 
 ---
 

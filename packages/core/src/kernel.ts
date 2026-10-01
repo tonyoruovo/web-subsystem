@@ -53,12 +53,13 @@ import {
   appendFingerprint,
   createEnvelope,
   makeFingerprint,
+  type FingerprintTrail,
   type IdFactory,
   type OutgoingPacket,
   type PacketEnvelope,
 } from './packet';
 import { UnitRuntime, type RuntimeHost, type StatePersistence } from './runtime';
-import { assertSendAllowed } from './scope';
+import { assertSendAllowed, type Scope } from './scope';
 import type { ProcessorRunnerOptions } from './supervisor';
 import type { ControlInterface, PacketPort, SubsystemDefinition, UnitDefinition } from './unit';
 import { createStore, type Schedule, type View } from './view';
@@ -385,6 +386,7 @@ export class Kernel {
       persistence: options.persistence,
       schedule: options.schedule,
       processors: options.processors,
+      statuses: this.#statuses.view,
     };
 
     const nodes: DependencyNode[] = [];
@@ -405,6 +407,19 @@ export class Kernel {
       const runtime = new UnitRuntime(definition as UnitDefinition, null, host);
       this.#roots.push(runtime);
       register(runtime);
+    }
+
+    // Centralized subsystems are infrastructure: they may only require each other.
+    for (const runtime of this.#roots) {
+      if (runtime.subsystem.kind !== 'centralized') continue;
+      for (const dependency of runtime.definition.requires ?? []) {
+        const target = this.#runtimes.get(dependency.target);
+        if (isRequired(dependency) && target && target.root.subsystem.kind !== 'centralized') {
+          throw new Error(
+            `Centralized subsystem "${runtime.id}" cannot require "${dependency.target}": it is not centralized.`,
+          );
+        }
+      }
     }
 
     const order = new DependencyGraph(nodes).order(); // throws on a required cycle
@@ -430,14 +445,19 @@ export class Kernel {
   }
 
   /**
-   * @summary Starts every subsystem in dependency order.
+   * @summary Starts every subsystem: centralized ones first, each group in dependency order.
    * @description Calling it again has no effect.
    * @returns {Promise<void>} Resolves once every unit that can start has started.
    */
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
-    for (const runtime of this.#order) if (!runtime.parent) await runtime.start();
+    // Centralized subsystems first (ARCHITECTURE §12), each group in dependency order.
+    const roots = this.#order.filter((runtime) => !runtime.parent);
+    for (const runtime of roots)
+      if (runtime.subsystem.kind === 'centralized') await runtime.start();
+    for (const runtime of roots)
+      if (runtime.subsystem.kind !== 'centralized') await runtime.start();
     await this.settled();
   }
 
@@ -503,15 +523,57 @@ export class Kernel {
   }
 
   /**
-   * @summary Delivers a 1-to-1 envelope to its target and resolves with the reply.
-   * @description Stamps a `delivered` fingerprint and calls the target's `receive`.
+   * @summary Returns a subsystem's scope.
+   * @description Routers use it to check the send rule for envelopes they did not build.
+   * @param {string} id A subsystem id.
+   * @returns {Scope | undefined} The scope, or `undefined` for an unknown id or a feature.
+   */
+  scopeOf(id: string): Scope | undefined {
+    const runtime = this.#runtimes.get(id);
+    return runtime && !runtime.parent ? runtime.subsystem.scope : undefined;
+  }
+
+  /**
+   * @summary Lists the running subsystems that receive an event.
+   * @description Running subsystems with a `receive` handler that list
+   * `eventId` in `subscribes`, in registration order.
+   * @param {string} eventId The event id.
+   * @returns {string[]} Their ids.
+   */
+  subscribers(eventId: string): string[] {
+    return this.#roots
+      .filter(
+        (runtime) =>
+          runtime.running &&
+          runtime.subsystem.receive !== undefined &&
+          runtime.subsystem.subscribes?.includes(eventId) === true,
+      )
+      .map((runtime) => runtime.id);
+  }
+
+  /**
+   * @summary Delivers an envelope to one subsystem and resolves with its reply.
+   * @description
+   * Delivers to `metadata.target`, or to `options.to` (used to hand a
+   * broadcast to one subscriber). Stamps a `delivered` fingerprint, calls the
+   * subsystem's `receive`, and passes the packet's final trail to
+   * `options.onTrail`. With `options.clone`, the subsystem receives its own
+   * copy of the payload.
    * @param {PacketEnvelope} envelope The envelope.
-   * @returns {Promise<unknown>} The target's reply.
+   * @param {object} [options] `to`: the subsystem to deliver to; `clone`: give it a copy; `onTrail`: receives the trail after `receive` returns or throws.
+   * @returns {Promise<unknown>} The subsystem's reply.
    * @throws {UnitUnavailableError} When the target is unknown, a feature, not running, or has no `receive`.
    * @throws {PacketExpiredError} When the envelope's time to live has passed.
    */
-  async deliver(envelope: PacketEnvelope): Promise<unknown> {
-    const targetId = envelope.metadata.target;
+  async deliver(
+    envelope: PacketEnvelope,
+    options: {
+      readonly to?: string;
+      readonly clone?: boolean;
+      readonly onTrail?: (trail: FingerprintTrail) => void;
+    } = {},
+  ): Promise<unknown> {
+    const targetId = options.to ?? envelope.metadata.target;
     const runtime = targetId === null ? undefined : this.#runtimes.get(targetId);
     if (!runtime || runtime.parent) {
       throw new UnitUnavailableError(
@@ -524,9 +586,13 @@ export class Kernel {
     const receive = runtime.subsystem.receive;
     if (!receive) throw new UnitUnavailableError(runtime.id, 'it does not receive packets');
 
-    const packet = new Packet(envelope);
+    const packet = new Packet(envelope, { clone: options.clone });
     packet.stamp(makeFingerprint(runtime.id, 'delivered', { timestamp: this.#now() }));
-    return receive.call(runtime.subsystem, packet, runtime.context!);
+    try {
+      return await receive.call(runtime.subsystem, packet, runtime.context!);
+    } finally {
+      options.onTrail?.(packet.header.fingerprints);
+    }
   }
 
   /**
@@ -612,7 +678,8 @@ export class Kernel {
     if (this.#stopping) return;
     for (const runtime of this.#order) {
       const unmet = this.#unmet(runtime);
-      if (runtime.status === 'UNINITIALIZED') {
+      // Only units already asked to start (waiting ones): the boot loop owns the rest.
+      if (runtime.status === 'UNINITIALIZED' && runtime.startRequested) {
         await runtime.start();
       } else if (runtime.running && unmet.length > 0) {
         await runtime.suspend(`Waiting for ${unmet.join(', ')}.`, true);

@@ -16,18 +16,18 @@ The kernel of the platform. Every other `@platform/*` package is built on it.
 
 ## What is in the package
 
-| Area | Exports | Design reference |
-|---|---|---|
-| Units and the kernel | `defineSubsystem`, `defineUnit`, `Kernel`, `UnitHandle`, `UnitContext` | [ARCHITECTURE §3](../../docs/ARCHITECTURE.md#3-the-unit-model) |
-| Lifecycle | `Lifecycle`, `UnitStatus`, `TRANSITIONS`, `canTransition` | [§4](../../docs/ARCHITECTURE.md#4-lifecycle) |
-| State | `createStateCell`, `StateCell`, `StateDefinition` | [§5](../../docs/ARCHITECTURE.md#5-state) |
-| Views | `View`, `createStore`, `deriveView` | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views) |
-| Dependencies | `DependencyGraph`, `LateBinding`, `Dependency` | [§7](../../docs/ARCHITECTURE.md#7-dependencies) |
-| Processors and workers | `ProcessorDef`, `defineProcessor`, `ProcessorRunner`, `WorkerBudget`, `createScheduler` | [§8](../../docs/ARCHITECTURE.md#8-processors-and-workers) |
-| Packets | `Packet`, `PacketEnvelope`, `createEnvelope`, `CorrelationRegistry` | [§9](../../docs/ARCHITECTURE.md#9-packets) |
-| Transports | `Transport`, `createChannelTransportPair`, `createInRealmTransportPair`, `RpcEndpoint` | [§10](../../docs/ARCHITECTURE.md#10-messaging-topology) |
-| Scopes and routes | `Scope`, `reaches`, `assertSendAllowed`, `RouteSource` | [§11](../../docs/ARCHITECTURE.md#11-scopes) |
-| Global wire protocol | `encodeWire`, `decodeWire`, `WireEnvelopeSchema` | [§11.4](../../docs/ARCHITECTURE.md#114-global-scope-the-server) |
+| Area                   | Exports                                                                                 | Design reference                                                |
+| ---------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Units and the kernel   | `defineSubsystem`, `defineUnit`, `Kernel`, `UnitHandle`, `UnitContext`                  | [ARCHITECTURE §3](../../docs/ARCHITECTURE.md#3-the-unit-model)  |
+| Lifecycle              | `Lifecycle`, `UnitStatus`, `TRANSITIONS`, `canTransition`                               | [§4](../../docs/ARCHITECTURE.md#4-lifecycle)                    |
+| State                  | `createStateCell`, `StateCell`, `StateDefinition`                                       | [§5](../../docs/ARCHITECTURE.md#5-state)                        |
+| Views                  | `View`, `createStore`, `deriveView`                                                     | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views)          |
+| Dependencies           | `DependencyGraph`, `LateBinding`, `Dependency`                                          | [§7](../../docs/ARCHITECTURE.md#7-dependencies)                 |
+| Processors and workers | `ProcessorDef`, `defineProcessor`, `ProcessorRunner`, `WorkerBudget`, `createScheduler` | [§8](../../docs/ARCHITECTURE.md#8-processors-and-workers)       |
+| Packets                | `Packet`, `PacketEnvelope`, `createEnvelope`, `CorrelationRegistry`                     | [§9](../../docs/ARCHITECTURE.md#9-packets)                      |
+| Transports             | `Transport`, `createChannelTransportPair`, `createInRealmTransportPair`, `RpcEndpoint`  | [§10](../../docs/ARCHITECTURE.md#10-messaging-topology)         |
+| Scopes and routes      | `Scope`, `reaches`, `assertSendAllowed`, `RouteSource`                                  | [§11](../../docs/ARCHITECTURE.md#11-scopes)                     |
+| Global wire protocol   | `encodeWire`, `decodeWire`, `WireEnvelopeSchema`                                        | [§11.4](../../docs/ARCHITECTURE.md#114-global-scope-the-server) |
 
 ## Installation
 
@@ -39,19 +39,19 @@ Inside this monorepo, depend on the workspace package:
 }
 ```
 
-| Peer dependency | Why |
-|---|---|
-| `zod` `^4` | Validates the Global wire protocol. |
+| Peer dependency | Why                                 |
+| --------------- | ----------------------------------- |
+| `zod` `^4`      | Validates the Global wire protocol. |
 
 Runs in the supported browsers (see the [root README](../../README.md#supported-platforms)) and in Node 24 for tests. Worker hosts need a bundler that understands `new Worker(new URL(..., import.meta.url))`, such as Vite, webpack 5 or Rollup.
 
 ## Entry points
 
-| Import | Use it for |
-|---|---|
-| `@platform/core` | Everything an app or a subsystem package needs. |
+| Import                   | Use it for                                                                        |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `@platform/core`         | Everything an app or a subsystem package needs.                                   |
 | `@platform/core/testing` | `createTestPlatform` and helpers: boot real units in tests, without browser APIs. |
-| `@platform/core/worker` | `serveProcessor`: the one call a worker entry file makes. |
+| `@platform/core/worker`  | `serveProcessor`: the one call a worker entry file makes.                         |
 
 ## Quick start
 
@@ -156,9 +156,9 @@ handle.lifecycle.subscribe(() => {
 
 ```ts
 requires: [
-  { target: 'storage' },                        // required, must be READY
-  { target: 'consent', kind: 'optional' },     // runs without it
-  { target: 'network/interceptor' },           // a feature of another subsystem
+  { target: 'storage' }, // required, must be READY
+  { target: 'consent', kind: 'optional' }, // runs without it
+  { target: 'network/interceptor' }, // a feature of another subsystem
 ];
 ```
 
@@ -257,12 +257,13 @@ defineSubsystem({
       job: 'sink',
       hosts: ['dedicated', 'virtual'],
       load: () => import('./sync.processor').then((m) => m.syncProcessor),
-      dedicated: () =>
-        new Worker(new URL('./sync.worker.ts', import.meta.url), { type: 'module' }),
+      dedicated: () => new Worker(new URL('./sync.worker.ts', import.meta.url), { type: 'module' }),
     },
   ],
   init: async (ctx) => {
-    const total = await ctx.processor<{ items: number[] }, number>('sum').call({ items: [1, 2, 3] });
+    const total = await ctx
+      .processor<{ items: number[] }, number>('sum')
+      .call({ items: [1, 2, 3] });
   },
   // ...
 });
@@ -310,18 +311,18 @@ await platform.stop();
 
 ## Errors
 
-| Error | Thrown when |
-|---|---|
-| `IllegalTransitionError` | A lifecycle transition is not allowed. |
-| `DependencyCycleError` | Required dependencies form a cycle (at kernel construction). |
-| `StateSerializationError` | State would stop being structured-cloneable. |
-| `UnitUnavailableError` | A packet targets an unknown, non-running or feature unit. |
-| `PacketExpiredError` | A packet's `ttl` passed before delivery. |
-| `PayloadConsumedError` | A packet's payload is read twice. |
-| `ScopeViolationError` | A broadcast is sent outside its sender's scope. |
-| `HostFailureError` | A processor host failed; its `trigger` says why. |
-| `ProcessorStartError` | No host, not even `virtual`, could start a processor. |
-| `WireProtocolError` | Data is not a valid Global wire envelope. |
+| Error                                              | Thrown when                                                                |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| `IllegalTransitionError`                           | A lifecycle transition is not allowed.                                     |
+| `DependencyCycleError`                             | Required dependencies form a cycle (at kernel construction).               |
+| `StateSerializationError`                          | State would stop being structured-cloneable.                               |
+| `UnitUnavailableError`                             | A packet targets an unknown, non-running or feature unit.                  |
+| `PacketExpiredError`                               | A packet's `ttl` passed before delivery.                                   |
+| `PayloadConsumedError`                             | A packet's payload is read twice.                                          |
+| `ScopeViolationError`                              | A broadcast is sent outside its sender's scope.                            |
+| `HostFailureError`                                 | A processor host failed; its `trigger` says why.                           |
+| `ProcessorStartError`                              | No host, not even `virtual`, could start a processor.                      |
+| `WireProtocolError`                                | Data is not a valid Global wire envelope.                                  |
 | `RpcTimeoutError`, `RpcClosedError`, `RemoteError` | A request over a port timed out, was cut off, or failed on the other side. |
 
 ## Development

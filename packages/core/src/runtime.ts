@@ -47,7 +47,7 @@ import type {
   UnitContext,
   UnitDefinition,
 } from './unit';
-import type { Schedule } from './view';
+import type { Schedule, View } from './view';
 
 /**
  * @summary Loads and saves units' persisted state (ARCHITECTURE §5).
@@ -140,6 +140,8 @@ export interface RuntimeHost {
   readonly processors?: ProcessorRunnerOptions;
   /** View notification scheduling. */
   readonly schedule?: Schedule;
+  /** Every unit's lifecycle snapshot, for `ctx.statuses`. */
+  readonly statuses: View<Readonly<Record<string, LifecycleSnapshot>>>;
 }
 
 /**
@@ -196,6 +198,7 @@ export class UnitRuntime {
   #abort: AbortController | null = null;
   #suspendedForDependencies = false;
   #initialized = false;
+  #startRequested = false;
 
   /**
    * @param {UnitDefinition} definition The unit's definition.
@@ -275,6 +278,14 @@ export class UnitRuntime {
   }
 
   /**
+   * @summary Tells whether `start` was ever called: the unit is booting, running, or waiting.
+   * @returns {boolean} `false` for a unit the boot has not reached yet.
+   */
+  get startRequested(): boolean {
+    return this.#startRequested;
+  }
+
+  /**
    * @summary Tells whether the kernel suspended this unit because a dependency stopped.
    * @returns {boolean} `true` when the suspension should end once the dependency runs again.
    */
@@ -299,6 +310,7 @@ export class UnitRuntime {
    */
   async start(): Promise<void> {
     if (this.status !== 'UNINITIALIZED' && this.status !== 'FAILED') return;
+    this.#startRequested = true;
 
     const unmet = this.host.unmet(this);
     if (unmet.length > 0) {
@@ -528,6 +540,7 @@ export class UnitRuntime {
       },
       busy: (isBusy) => this.busy(isBusy),
       fail: (error) => void this.fail(error),
+      statuses: this.host.statuses,
       processor: <In, Out>(processorId: string) => {
         const runner = this.#processors.get(processorId);
         if (!runner) throw new Error(`[${this.id}] No processor "${processorId}".`);

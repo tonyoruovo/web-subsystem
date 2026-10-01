@@ -57,6 +57,7 @@
  */
 
 import type { Dependency } from './dependency';
+import type { LifecycleSnapshot } from './lifecycle';
 import type { OutgoingPacket, Packet } from './packet';
 import type { ProcessorDef } from './processor';
 import type { Scope } from './scope';
@@ -261,6 +262,13 @@ export interface UnitContext<S> {
    * @throws {Error} For an id the unit does not declare.
    */
   processor<In = unknown, Out = unknown>(id: string): ProcessorHandle<In, Out>;
+  /**
+   * @summary Every unit's lifecycle snapshot, keyed by full id. Read-only.
+   * @description The same view as `kernel.statuses`. Global State derives the
+   * platform status from it; other units can use it to adapt to the rest of
+   * the platform.
+   */
+  readonly statuses: View<Readonly<Record<string, LifecycleSnapshot>>>;
 }
 
 /**

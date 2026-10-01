@@ -144,6 +144,20 @@ export class Lifecycle {
   }
 
   /**
+   * @summary Updates the reason and off features without changing status
+   * (for example, a different feature failed while already `DEGRADED`).
+   * @param {object} details The new details.
+   */
+  describe(details: { reason?: string | null; offFeatures?: readonly string[] }): void {
+    const current = this.#store.view.getSnapshot();
+    this.#store.set({
+      ...current,
+      reason: details.reason ?? current.reason,
+      offFeatures: details.offFeatures ?? current.offFeatures,
+    });
+  }
+
+  /**
    * @summary Records the dependencies the unit is waiting for, without changing status.
    * @param {readonly string[]} waitingFor The unmet required dependencies.
    */

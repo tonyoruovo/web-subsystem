@@ -165,9 +165,11 @@ export class WorkerHost<In, Out> implements Host<In, Out> {
       ? worker
       : (worker as SharedWorker).port) as unknown as PortLike;
 
-    worker.addEventListener('error', (event) =>
-      this.#fail('error', (event as ErrorEvent).message || 'The worker reported an error.'),
-    );
+    worker.addEventListener('error', (event) => {
+      // The host handles it by failing over, so the page does not report it as uncaught.
+      event.preventDefault();
+      this.#fail('error', (event as ErrorEvent).message || 'The worker reported an error.');
+    });
     port.addEventListener('messageerror', () =>
       this.#fail('error', 'A message could not be deserialized.'),
     );

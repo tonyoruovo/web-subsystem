@@ -62,30 +62,35 @@ Subsystem  = Unit + identity + scope + packet port
 Feature    = Unit (uses the parent's identity; talks to siblings directly)
 ```
 
+A unit is declared once as a **definition** (plain data plus functions) and run by the kernel. The kernel creates the state cell, the context and the port; the definition never constructs them itself.
+
 ```ts
-interface Unit<S> {
+interface UnitDefinition<S, C extends ControlInterface> {
   /** Stable id. For features: unique inside the parent. */
   readonly id: string;
   /** What must be present for this unit to turn on (§7). */
-  readonly requires: readonly Dependency[];
-  /** Serializable state with an exposure policy (§5). */
-  readonly state: StateCell<S>;
-  /** The "on" switch. Returns the disposer: the "off" switch (§4). */
-  init(ctx: UnitContext): Promise<Disposer>;
-  /** Work done by this unit (§8). */
+  readonly requires?: readonly Dependency[];
+  /** Initial state, exposure policy and schema version (§5). */
+  readonly state: StateDefinition<S>;
+  /** The "on" switch. May return the disposer: the "off" switch (§4). */
+  init?(ctx: UnitContext<S>): Disposer | void | Promise<Disposer | void>;
+  /** Work done by this unit (§8, M2). */
   readonly processors?: readonly ProcessorDef[];
   /** Child units (§3.1). */
-  readonly features?: readonly Unit<unknown>[];
-  /** Commands and read-only views (§6). */
-  readonly control: ControlInterface;
+  readonly features?: readonly UnitDefinition<any, any>[];
+  /** Builds the commands and read-only views (§6) from the context. */
+  control(ctx: UnitContext<S>): C;
 }
 
-interface Subsystem<S> extends Unit<S> {
-  readonly scope: Scope;               // §11
+interface SubsystemDefinition<S, C> extends UnitDefinition<S, C> {
+  readonly scope: Scope;                         // §11
   readonly kind: 'centralized' | 'featurized';
-  readonly port: PacketPort;           // §9, §10
+  /** Handles packets addressed to this subsystem; the return value is the reply. */
+  receive?(packet: Packet, ctx: UnitContext<S>): unknown;
 }
 ```
+
+The context gives a unit its state cell, an `AbortSignal` that fires on destruction, its siblings' control interfaces (features only, §3.1), the control interfaces of the units it depends on, and the packet port, which features share with their parent.
 
 ### 3.1 Feature rules
 
@@ -97,6 +102,14 @@ interface Subsystem<S> extends Unit<S> {
 ### 3.2 The initializer token
 
 The README says an initializer "pushes the token used to initialize it". In this architecture, **the token is the disposer** that `init` returns. Destruction calls the disposers in reverse order of initialization. This ties the "on" switch to its matching "off" switch.
+
+### 3.3 Kernel
+
+The kernel (`@platform/core`) registers subsystem definitions, validates the dependency graph, and runs every unit's lifecycle. Until the Queue exists (M3), it delivers packets through a pluggable **packet router**; the Queue becomes the router in M3.
+
+- A unit whose required dependency is not met stays `UNINITIALIZED` and reports what it is `waitingFor`. It starts as soon as the dependency is met (§7.1).
+- A unit with `features` reports `DEGRADED` while any feature is not running.
+- `@platform/core/testing` provides an in-memory platform with an in-memory router, for tests that boot real units without browser APIs.
 
 ---
 

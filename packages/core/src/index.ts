@@ -85,6 +85,7 @@
  * @author MathAid
  */
 
+export * from './backoff';
 export * from './budget';
 export * from './correlation';
 export * from './dependency';

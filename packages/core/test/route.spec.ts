@@ -11,20 +11,16 @@ function fakeWindow(withNavigation: boolean) {
     if (url) location.pathname = new URL(String(url), 'https://app.test').pathname;
   };
   const history = { pushState: vi.fn(setPath), replaceState: vi.fn(setPath) };
+  const navigation: RouteWindow['navigation'] = {
+    addEventListener: (_type, listener) => navigatesuccess.add(listener),
+    removeEventListener: (_type, listener) => navigatesuccess.delete(listener),
+  };
   const win: RouteWindow = {
     location,
     history: history as unknown as RouteWindow['history'],
     addEventListener: (_type, listener) => popstate.add(listener),
     removeEventListener: (_type, listener) => popstate.delete(listener),
-    ...(withNavigation
-      ? {
-          navigation: {
-            addEventListener: (_type: 'navigatesuccess', l: () => void) => navigatesuccess.add(l),
-            removeEventListener: (_type: 'navigatesuccess', l: () => void) =>
-              navigatesuccess.delete(l),
-          },
-        }
-      : {}),
+    navigation: withNavigation ? navigation : undefined,
   };
   return { win, location, history, popstate, navigatesuccess };
 }

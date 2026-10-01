@@ -1,0 +1,20 @@
+{
+  "name": "@platform/managers",
+  "version": "0.0.1",
+  "description": "A drop-in manager platform for dependable frontends: storage, network, auth, sync, realtime, translation, analytics, and a message bus.",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./compression": "./compression.ts"
+  },
+  "files": [
+    "*.ts",
+    "**/*.ts"
+  ],
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "sideEffects": false
+}

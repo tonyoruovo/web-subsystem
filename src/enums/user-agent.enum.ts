@@ -1,0 +1,15 @@
+export enum UserAgentKind {
+  IE = 'internet-explorer',
+  EDGE = 'edge',
+  EDGE_LEGACY = 'edge-legacy',
+  CHROME = 'chrome',
+  CHROMIUM = 'chromium',
+  SAFARI = 'safari',
+  FIREFOX = 'firefox',
+  OPERA = 'opera',
+  BRAVE = 'brave',
+  UC = 'uc',
+  FIREFOX_IOS = 'firefox-ios',
+  SAMSUNG = 'samsung',
+  UNKNOWN = '',
+}

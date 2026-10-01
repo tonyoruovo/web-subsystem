@@ -1,0 +1,156 @@
+# @platform
+
+> **Status: pre-alpha (`0.0.1`).** The architecture is agreed. The implementation has not started on it yet. Nothing here is ready for production use, and every API shown below may change.
+>
+> `@platform` is a **placeholder name** until version `0.9.0`.
+
+A framework-agnostic **platform runtime** for browser applications. Your app boots it once and hands it the work that must not fail: storage, network calls, authentication, sync, real-time messaging, and the messages between them.
+
+## Why
+
+Web apps lose their connection, run out of storage, and hit unexpected errors. The platform is designed so that none of these stops critical work:
+
+- **Resilience:** work is queued, persisted, retried, and replayed. A failing part turns itself off without bringing down the rest.
+- **Efficiency:** data is deduplicated, cached, compressed, and synced as deltas.
+- **Visible, non-blocking remote work:** HTTP, WebSocket, webhook, and RPC operations run off the main thread when possible, and the user can always see what is still pending.
+
+## Core ideas
+
+| Concept | In one sentence |
+|---|---|
+| **Subsystem** (also *manager*) | An independent part of the platform, such as Storage or Auth, with its own state, lifecycle, and public interface. |
+| **Feature** | A part of a subsystem that can fail on its own without failing its parent. |
+| **Packet** | A message between subsystems. It is traced with fingerprints, and its payload is read once per delivery. |
+| **Queue** and **Notification Center** | Every packet enters through the Queue (priority, retry, dead letters). The Notification Center fans broadcasts out to subscribers. |
+| **Scope** | How far a subsystem's broadcasts reach: **Page**, **Tab**, **Window** (all tabs across your site's subdomains), or **Global** (all devices, through your server). |
+| **Workers** | Each processor runs on a shared worker, a dedicated worker, or the main thread, and falls back automatically when one is not available. |
+
+The full design is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Packages (planned)
+
+Each subsystem is its own package. Packages depend on each other through peer dependencies, and optional dependencies turn individual features on or off.
+
+| Package | Purpose |
+|---|---|
+| `@platform/core` | Units, lifecycle, dependency resolution, packets, scopes, worker hosts, the Global wire protocol |
+| `@platform/global-state` | Environment detection, platform status, tab identity, pending work |
+| `@platform/queue` | Single entry point for packets: admission, priority, retry, dead letters |
+| `@platform/notification` | Broadcast routing, subscriptions, access control |
+| `@platform/logger` | Logs and traces, buffered from the first moment of boot |
+| `@platform/crypto` | Keys, encryption, signing |
+| `@platform/storage` | One schema-validated interface over IndexedDB, OPFS, Cache, Web Storage, and memory |
+| `@platform/consent` | Consent grants |
+| `@platform/settings` | User settings, with optimistic updates |
+| `@platform/network` | Requests with retry, deduplication, caching, and interceptors |
+| `@platform/auth` | Tokens, refresh, permissions, elevation |
+| `@platform/sync` | Server sync with intervals, offline replay, and conflict resolution |
+| `@platform/realtime` | WebSocket and SSE connections, and the Global scope transport |
+| `@platform/translation` | Translation catalogs |
+| `@platform/analytics` | Consent-gated, sampled analytics |
+| `@platform/design-system` | To be designed |
+| `@platform/hub` | The page that connects tabs across subdomains (Window scope) |
+| `@platform/platform` | Boots a chosen set of subsystems |
+| `@platform/vue` | Vue adapter |
+| `@platform/create` | Project scaffolder: `npm init @platform` |
+
+## Intended usage
+
+> Illustrative only. These APIs are designed in milestones M1–M10 and may change.
+
+```ts
+import { createPlatform } from '@platform/platform';
+import { storage } from '@platform/storage';
+import { network } from '@platform/network';
+import { auth } from '@platform/auth';
+
+const platform = await createPlatform({
+  subsystems: [storage(), network(), auth({ refreshFn })],
+});
+
+// Every view is a store: read a snapshot, subscribe to changes.
+const status = platform.globalState.views.status;
+status.subscribe(() => console.log(status.getSnapshot()));
+```
+
+With Vue:
+
+```ts
+import { createApp } from 'vue';
+import { platformPlugin, usePlatform, useView } from '@platform/vue';
+
+createApp(App).use(platformPlugin, { subsystems: [storage(), network()] }).mount('#app');
+
+// In a component's setup:
+const platform = usePlatform();
+const status = useView(platform.globalState.views.status); // Readonly<ShallowRef<...>>
+```
+
+The core works without any framework. Views follow the `getSnapshot` and `subscribe` contract, so they also work with React's `useSyncExternalStore` without an adapter.
+
+## Supported platforms
+
+| Platform | Minimum version |
+|---|---|
+| Desktop Chrome, Edge, Firefox, Safari | Last two major versions |
+| Chrome for Android | Last two major versions |
+| iOS and iPadOS (every browser) | 16.4 |
+
+In-app WebViews are not supported. Packages can be imported in server-side rendering but do not run there.
+
+## Deployment notes
+
+- **Window scope** (across subdomains) needs the hub page from `@platform/hub`, served from your **apex** domain. That path must allow your subdomains to frame it: send `Content-Security-Policy: frame-ancestors https://example.com https://*.example.com`, and don't send `X-Frame-Options`.
+- **Global scope** needs a server that implements the platform's wire protocol. This project ships the protocol schema and conformance fixtures, not a server.
+
+## Repository layout
+
+```text
+docs/        architecture and plan (start here)
+proposals/   the original design proposals; proposals/README.md is the authoritative model
+src/         existing code, to be moved into packages/ milestone by milestone
+tests/       existing tests
+packages/    (from M0) one folder per package
+```
+
+Precedence when documents disagree: [`proposals/README.md`](proposals/README.md) > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) > the per-subsystem proposals.
+
+## Development
+
+Requires [pnpm](https://pnpm.io) 11.
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm test
+```
+
+```bash
+pnpm lint
+```
+
+> Many test suites don't load yet: there is no Vitest config, so the `@/` alias doesn't resolve, and `dist/` gets collected. Milestone M0 fixes this.
+
+## Roadmap
+
+| Milestone | Delivers | Version |
+|---|---|---|
+| M0 | Tooling, CI, monorepo, browser test matrix | `0.0.2` |
+| M1 | Kernel (`core`) | `0.1.0` |
+| M2 | Worker hosts and transports | `0.2.0` |
+| M3 | Global State, Queue, Notification Center | `0.3.0` |
+| M4 | Pilot: Logger and Consent | `0.4.0` |
+| M5 | Window scope hub | `0.5.0` |
+| M6 | Crypto and Storage | `0.6.0` |
+| M7 | Network, Auth, Sync, Realtime | `0.7.0` |
+| M8 | Global scope | `0.8.0` |
+| M9 | Translation, Settings, Analytics, Design System; final name chosen | `0.9.0` |
+| M10 | Orchestrator, Vue adapter, scaffolder | `1.0.0` |
+
+Details and exit criteria are in [`docs/PLAN.md`](docs/PLAN.md).
+
+## License
+
+ISC

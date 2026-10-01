@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.vite/
+*.tsbuildinfo
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.swp
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Test output
+coverage/
+
+generated/
+bin/

@@ -1,22 +1,87 @@
 /**
  * @fileoverview
- * @summary Dependencies between units: the graph, its validation and boot order.
+ * @summary Dependencies between units: the graph, its validation, boot order, and late binding.
  * @description
- * Implements docs/ARCHITECTURE.md §7.1. Dependencies are declared per unit,
- * so the graph's nodes are subsystems **and** features (`subsystem/feature`).
- * A cycle between subsystems is fine as long as no cycle exists between the
+ * Implements docs/ARCHITECTURE.md §7. Dependencies are declared per unit, so
+ * the graph's nodes are subsystems **and** features (`subsystem/feature`). A
+ * cycle between subsystems is fine as long as no cycle exists between the
  * units themselves.
+ *
+ * ```text
+ *   network  <------------ auth            (auth requires network)
+ *     |                      ^
+ *     +-- network/interceptor+             (the feature requires auth)
+ *   no unit-level cycle: network -> auth -> network/interceptor
+ *   ```
  *
  * - Only **required** dependencies can form a cycle; optional ones only order the boot.
  * - A required dependency on a unit that is not registered is not an error:
  *   the dependent unit stays off (the "optional peer dependency not installed" case).
- * - Every feature implicitly depends on its parent being `INITIALIZING`.
+ * - The kernel adds an implicit dependency from every feature to its parent.
  *
+ * {@linkcode LateBinding} covers the other side of §7: buffering writes for a
+ * dependency that starts later than its user.
+ *
+ * @example
+ * Declaring dependencies on a unit
+ * ```ts
+ * defineSubsystem({
+ *   id: 'sync',
+ *   scope: 'tab',
+ *   kind: 'featurized',
+ *   requires: [
+ *     { target: 'network' },
+ *     { target: 'storage' },
+ *     { target: 'consent', kind: 'optional' },
+ *   ],
+ *   state: { initial: {} },
+ *   control: () => ({ commands: {}, views: {} }),
+ * });
+ * ```
+ *
+ * @example
+ * Checking a graph outside the kernel
+ * ```ts
+ * const graph = new DependencyGraph([
+ *   { id: 'storage', requires: [] },
+ *   { id: 'auth', requires: [{ target: 'storage' }] },
+ * ]);
+ * graph.order(); // ['storage', 'auth']
+ * ```
+ *
+ * @throws {DependencyCycleError} From {@linkcode DependencyGraph.validate} and {@linkcode DependencyGraph.order} for a required cycle.
  * @author MathAid
  */
 
-/** @summary A dependency on a subsystem (`id`) or a feature (`id/feature`). */
+/**
+ * @summary A dependency on a subsystem (`id`) or a feature (`id/feature`).
+ *
+ * @description
+ * `target` names the unit depended on. `kind` is `required` (the default: the
+ * unit stays off without it) or `optional` (the unit runs without it, with
+ * reduced behaviour). `when` is the status the target must reach: `READY` (the
+ * default, which also accepts `BUSY` and `DEGRADED`) or `INITIALIZING`.
+ *
+ * Units list their dependencies in `requires`. The kernel starts a unit only
+ * once its required dependencies are met, and lets it read them through
+ * `ctx.dependency(target)`.
+ *
+ * @example
+ * Example 1: A required subsystem
+ * ```ts
+ * const dependency: Dependency = { target: 'storage' };
+ * ```
+ *
+ * @example
+ * Example 2: An optional feature of another subsystem
+ * ```ts
+ * const dependency: Dependency = { target: 'network/interceptor', kind: 'optional' };
+ * ```
+ *
+ * @public
+ */
 export interface Dependency {
+  /** The unit depended on: `subsystem` or `subsystem/feature`. */
   readonly target: string;
   /** `required`: the unit stays off without it. `optional`: it runs with reduced behaviour. Default `required`. */
   readonly kind?: 'required' | 'optional';
@@ -24,21 +89,90 @@ export interface Dependency {
   readonly when?: 'READY' | 'INITIALIZING';
 }
 
-/** @summary A unit as the graph sees it. */
+/**
+ * @summary A unit as the dependency graph sees it: an id and its dependencies.
+ *
+ * @example
+ * Example 1: A subsystem node
+ * ```ts
+ * const node: DependencyNode = { id: 'auth', requires: [{ target: 'storage' }] };
+ * ```
+ *
+ * @example
+ * Example 2: A feature node, with the implicit parent edge the kernel adds
+ * ```ts
+ * const node: DependencyNode = {
+ *   id: 'storage/idb',
+ *   requires: [{ target: 'storage', when: 'INITIALIZING' }],
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface DependencyNode {
+  /** The unit's full id. */
   readonly id: string;
+  /** Its dependencies. */
   readonly requires: readonly Dependency[];
 }
 
-/** @summary Thrown when required dependencies form a cycle. */
+/**
+ * @summary Thrown when required dependencies form a cycle.
+ *
+ * @description
+ * `cycle` lists the ids along the cycle, starting and ending with the same
+ * id. The kernel throws it from its constructor, before anything starts.
+ *
+ * @example
+ * Example 1: Printing the cycle
+ * ```ts
+ * try {
+ *   new Kernel(subsystems);
+ * } catch (error) {
+ *   if (error instanceof DependencyCycleError) console.error(error.cycle.join(' -> '));
+ * }
+ * ```
+ *
+ * @example
+ * Example 2: The message
+ * ```ts
+ * new DependencyCycleError(['a', 'b', 'a']).message;
+ * // 'Required dependencies form a cycle: a -> b -> a.'
+ * ```
+ *
+ * @public
+ */
 export class DependencyCycleError extends Error {
   override readonly name = 'DependencyCycleError';
+
+  /**
+   * @param {readonly string[]} cycle The ids along the cycle, first id repeated at the end.
+   */
   constructor(readonly cycle: readonly string[]) {
     super(`Required dependencies form a cycle: ${cycle.join(' -> ')}.`);
   }
 }
 
-/** @summary True when `dependency` is required. */
+/**
+ * @summary Tells whether a dependency is required.
+ *
+ * @example
+ * Example 1: The default is required
+ * ```ts
+ * isRequired({ target: 'storage' }); // true
+ * ```
+ *
+ * @example
+ * Example 2: An optional dependency
+ * ```ts
+ * isRequired({ target: 'consent', kind: 'optional' }); // false
+ * ```
+ *
+ * @param {Dependency} dependency The dependency.
+ * @returns {boolean} `true` unless `kind` is `optional`.
+ *
+ * @public
+ */
 export function isRequired(dependency: Dependency): boolean {
   return (dependency.kind ?? 'required') === 'required';
 }
@@ -46,7 +180,18 @@ export function isRequired(dependency: Dependency): boolean {
 /**
  * @summary The dependency graph of every registered unit.
  *
+ * @description
+ * Built from {@linkcode DependencyNode}s, it answers three questions: whether
+ * required dependencies form a cycle (`validate`), which required targets are
+ * not registered at all (`missing`), and in which order units should boot
+ * (`order`): dependencies first, then registration order. Duplicate ids are
+ * rejected when it is built.
+ *
+ * The kernel builds one from every subsystem and feature when it is
+ * constructed. Use it directly to check a configuration in tooling or tests.
+ *
  * @example
+ * Example 1: Ordering a boot
  * ```ts
  * const graph = new DependencyGraph([
  *   { id: 'storage', requires: [] },
@@ -55,10 +200,23 @@ export function isRequired(dependency: Dependency): boolean {
  * graph.validate();
  * graph.order(); // ['storage', 'auth']
  * ```
+ *
+ * @example
+ * Example 2: Finding dependencies that are not installed
+ * ```ts
+ * const graph = new DependencyGraph([{ id: 'analytics', requires: [{ target: 'consent' }] }]);
+ * graph.missing('analytics'); // ['consent']: analytics will never start
+ * ```
+ *
+ * @public
  */
 export class DependencyGraph {
   readonly #nodes = new Map<string, DependencyNode>();
 
+  /**
+   * @param {Iterable<DependencyNode>} nodes Every unit, in registration order.
+   * @throws {Error} When two nodes share an id.
+   */
   constructor(nodes: Iterable<DependencyNode>) {
     for (const node of nodes) {
       if (this.#nodes.has(node.id)) throw new Error(`Unit "${node.id}" is registered twice.`);
@@ -66,12 +224,21 @@ export class DependencyGraph {
     }
   }
 
-  /** @summary True when a unit with this id is registered. */
+  /**
+   * @summary Tells whether a unit with this id is registered.
+   * @param {string} id The unit's full id.
+   * @returns {boolean} `true` when registered.
+   */
   has(id: string): boolean {
     return this.#nodes.has(id);
   }
 
-  /** @summary Required targets of `id` that are not registered: the unit can never start. */
+  /**
+   * @summary Lists the required targets of `id` that are not registered.
+   * @description A unit with missing required targets can never start.
+   * @param {string} id The unit's full id.
+   * @returns {string[]} The missing targets. Empty for an unknown id.
+   */
   missing(id: string): string[] {
     return (this.#nodes.get(id)?.requires ?? [])
       .filter((d) => isRequired(d) && !this.#nodes.has(d.target))
@@ -80,7 +247,8 @@ export class DependencyGraph {
 
   /**
    * @summary Rejects cycles of required dependencies.
-   * @throws {DependencyCycleError} With the ids along the cycle.
+   * @description Depth-first search over required edges between registered units.
+   * @throws {DependencyCycleError} With the ids along the first cycle found.
    */
   validate(): void {
     const state = new Map<string, 'visiting' | 'done'>();
@@ -92,6 +260,7 @@ export class DependencyGraph {
       for (const dependency of this.#nodes.get(id)!.requires) {
         if (!isRequired(dependency) || !this.#nodes.has(dependency.target)) continue;
         const target = dependency.target;
+        // Reaching a node still on the stack closes a cycle.
         if (state.get(target) === 'visiting') {
           throw new DependencyCycleError([...stack.slice(stack.indexOf(target)), target]);
         }
@@ -105,11 +274,9 @@ export class DependencyGraph {
   }
 
   /**
-   * @summary A deterministic boot order: dependencies first, then registration order.
-   * @description
-   * Honours optional dependencies too, unless they would form a cycle, in
-   * which case only required dependencies decide the order.
-   *
+   * @summary Returns a deterministic boot order: dependencies first, then registration order.
+   * @description Honours optional dependencies too, unless they would form a
+   * cycle, in which case only required dependencies decide the order.
    * @returns {string[]} Every registered id.
    * @throws {DependencyCycleError} When required dependencies form a cycle.
    */
@@ -118,7 +285,12 @@ export class DependencyGraph {
     return this.#topologicalOrder(true) ?? this.#topologicalOrder(false)!;
   }
 
-  /** Kahn's algorithm, picking the earliest-registered ready node. `null` on a cycle. */
+  /**
+   * @summary Kahn's algorithm, always picking the earliest-registered node whose dependencies are placed.
+   * @param {boolean} withOptional Whether optional edges count.
+   * @returns {string[] | null} The order, or `null` when the edges form a cycle.
+   * @internal
+   */
   #topologicalOrder(withOptional: boolean): string[] | null {
     const ids = [...this.#nodes.keys()];
     const pending = new Map<string, Set<string>>();
@@ -142,20 +314,38 @@ export class DependencyGraph {
 }
 
 /**
- * @summary Buffers writes for a dependency that is not ready yet (§7.2).
+ * @summary Buffers writes for a dependency that is not ready yet (ARCHITECTURE §7.2).
+ *
  * @description
- * Before `bind`, writes are kept in a bounded buffer; on overflow the oldest
- * entry is dropped and counted. `bind` drains the buffer in order, then
- * passes writes straight through. `unbind` (the target left `READY`) goes
- * back to buffering. This one mechanism covers the Logger ring buffer, the
- * Queue's dead letters and Global State restoration.
+ * Before `bind`, `write` keeps items in a buffer of `capacity` items; on
+ * overflow the oldest item is dropped, counted in `dropped`, and reported to
+ * `onDrop`. `bind` drains the buffer into the sink in order, then passes
+ * writes straight through. `unbind` goes back to buffering, for example when
+ * the dependency leaves `READY`.
+ *
+ * Centralized subsystems start before the subsystems they write to. This one
+ * mechanism covers the Logger's ring buffer, the Queue's dead letters and
+ * Global State restoration.
  *
  * @example
+ * Example 1: Logging before Storage is ready
  * ```ts
  * const logs = new LateBinding<string>({ capacity: 500 });
  * logs.write('boot'); // buffered: storage is not ready
  * await logs.bind((line) => storage.append(line)); // drains 'boot', then writes go straight through
  * ```
+ *
+ * @example
+ * Example 2: Recording overflow as a fingerprint
+ * ```ts
+ * const deadLetters = new LateBinding<PacketEnvelope>({
+ *   capacity: 100,
+ *   onDrop: (_dropped, total) => logger.warn(`dead letters dropped: ${total}`),
+ * });
+ * ```
+ *
+ * @template T The item type.
+ * @public
  */
 export class LateBinding<T> {
   readonly #buffer: T[] = [];
@@ -163,6 +353,10 @@ export class LateBinding<T> {
   #draining = false;
   #dropped = 0;
 
+  /**
+   * @param {object} options `capacity` (at least 1) and an optional `onDrop` callback.
+   * @throws {RangeError} When `capacity` is below 1.
+   */
   constructor(
     private readonly options: {
       readonly capacity: number;
@@ -173,24 +367,34 @@ export class LateBinding<T> {
     if (options.capacity < 1) throw new RangeError('LateBinding capacity must be at least 1.');
   }
 
-  /** @summary How many items wait in the buffer. */
+  /**
+   * @summary How many items wait in the buffer.
+   * @returns {number} The count.
+   */
   get buffered(): number {
     return this.#buffer.length;
   }
 
-  /** @summary How many items were dropped on overflow. */
+  /**
+   * @summary How many items were dropped on overflow.
+   * @returns {number} The running total.
+   */
   get dropped(): number {
     return this.#dropped;
   }
 
-  /** @summary True when writes pass straight to the sink. */
+  /**
+   * @summary Tells whether writes pass straight to the sink.
+   * @returns {boolean} `true` when bound and not draining.
+   */
   get bound(): boolean {
     return this.#sink !== null && !this.#draining;
   }
 
   /**
    * @summary Writes an item: to the sink when bound, otherwise to the buffer.
-   * @returns The sink's result when bound.
+   * @param {T} item The item.
+   * @returns {void | Promise<void>} The sink's result when bound.
    */
   write(item: T): void | Promise<void> {
     if (this.bound) return this.#sink!(item);
@@ -204,10 +408,11 @@ export class LateBinding<T> {
 
   /**
    * @summary Binds the sink and drains the buffer in order.
-   * @description
-   * Writes that arrive while draining are queued behind the buffered ones. If
-   * the sink fails, the failed item stays at the front of the buffer, the
-   * binding is undone, and the error is rethrown.
+   * @description Writes that arrive while draining are queued behind the
+   * buffered ones. If the sink fails, the failed item stays at the front of
+   * the buffer, the binding is undone, and the error is rethrown.
+   * @param {(item: T) => void | Promise<void>} sink Receives each item.
+   * @returns {Promise<void>} Resolves once the buffer is drained.
    */
   async bind(sink: (item: T) => void | Promise<void>): Promise<void> {
     this.#sink = sink;

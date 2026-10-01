@@ -26,6 +26,19 @@ const instances = selectInstallations().map((installation) => ({
 export default defineConfig({
   resolve: { alias },
   test: {
+    coverage: {
+      provider: 'v8',
+      include: ['packages/*/src/**'],
+      // M1 gate (docs/PLAN.md): every lifecycle transition and resolver case is covered.
+      thresholds: {
+        'packages/core/src/{lifecycle,dependency}.ts': {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+      },
+    },
     projects: [
       {
         resolve: { alias },

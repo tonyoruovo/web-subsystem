@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:node": "vitest run --project node",
     "test:browser": "vitest run --project browser",
+    "test:e2e": "vitest run --project e2e",
     "test:coverage": "vitest run --project node --coverage",
     "check:browsers": "node scripts/check-browsers.ts",
     "test:watch": "vitest",
@@ -48,6 +49,7 @@
     "fake-indexeddb": "^6.2.5",
     "playwright": "^1.63.0",
     "prettier": "^3.9.5",
+    "rolldown": "1.2.11",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.64.0",
     "vitest": "4.1.11"

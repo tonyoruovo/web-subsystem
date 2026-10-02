@@ -116,6 +116,48 @@ export function selectInstallations(filter = process.env.BROWSERS): BrowserInsta
 }
 
 /**
+ * Playwright 1.63 disables these Chromium features by default
+ * (playwright-core chromiumSwitches.ts). ThirdPartyStoragePartitioning is
+ * among them, but users' Chrome ships with it on, and multi-origin tests
+ * depend on it.
+ */
+const PLAYWRIGHT_DISABLED_FEATURES = [
+  'AvoidUnnecessaryBeforeUnloadCheckSync',
+  'DestroyProfileOnBrowserClose',
+  'DialMediaRouteProvider',
+  'GlobalMediaControls',
+  'HttpsUpgrades',
+  'LensOverlay',
+  'MediaRouter',
+  'PaintHolding',
+  'ThirdPartyStoragePartitioning',
+  'BlockOriginHeaderModificationOnRedirect',
+  'Translate',
+  'AutoDeElevate',
+  'OptimizationHints',
+  'msForceBrowserSignIn',
+  'msEdgeUpdateLaunchServicesPreferredVersion',
+];
+
+/**
+ * @summary Launch options for an installation, with storage partitioning as users have it.
+ * @description For Chromium, removes Playwright's default that turns
+ * third-party storage partitioning off, and keeps its other defaults.
+ * @param {BrowserInstallation} installation The installation.
+ * @returns {object} Options for `browserType.launch`.
+ */
+export function launchOptionsFor(installation: BrowserInstallation) {
+  if (installation.engine !== 'chromium') return { executablePath: installation.executablePath };
+  return {
+    executablePath: installation.executablePath,
+    ignoreDefaultArgs: [`--disable-features=${PLAYWRIGHT_DISABLED_FEATURES.join(',')}`],
+    args: [
+      `--disable-features=${PLAYWRIGHT_DISABLED_FEATURES.filter((f) => f !== 'ThirdPartyStoragePartitioning').join(',')}`,
+    ],
+  };
+}
+
+/**
  * @summary Browser-context options for an installation (the emulated device, if any).
  * @param {BrowserInstallation} installation The installation.
  * @returns {object} Context options without the device's default engine.

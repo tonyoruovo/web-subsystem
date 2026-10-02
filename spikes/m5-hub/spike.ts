@@ -27,7 +27,11 @@ import { writeFileSync } from 'node:fs';
 
 import { chromium, firefox, webkit, type BrowserContext, type Frame, type Page } from 'playwright';
 
-import { contextOptionsFor, selectInstallations } from '../../playwright.config.ts';
+import {
+  contextOptionsFor,
+  launchOptionsFor,
+  selectInstallations,
+} from '../../playwright.config.ts';
 
 /** The site; `SITE=example.com` rules out quirks of the `.test` name. */
 const SITE = process.env.SITE ?? 'site.test';
@@ -132,45 +136,14 @@ interface Result {
   readonly error?: string;
 }
 
-/**
- * Playwright 1.63 disables these Chromium features by default (chromiumSwitches.ts),
- * including ThirdPartyStoragePartitioning, which real Chrome ships enabled. The
- * spike removes that default and re-disables the rest, so Chromium partitions
- * storage the way users' browsers do.
- */
-const PLAYWRIGHT_DISABLED_FEATURES = [
-  'AvoidUnnecessaryBeforeUnloadCheckSync',
-  'DestroyProfileOnBrowserClose',
-  'DialMediaRouteProvider',
-  'GlobalMediaControls',
-  'HttpsUpgrades',
-  'LensOverlay',
-  'MediaRouter',
-  'PaintHolding',
-  'ThirdPartyStoragePartitioning',
-  'BlockOriginHeaderModificationOnRedirect',
-  'Translate',
-  'AutoDeElevate',
-  'OptimizationHints',
-  'msForceBrowserSignIn',
-  'msEdgeUpdateLaunchServicesPreferredVersion',
-];
-const realPartitioning = {
-  ignoreDefaultArgs: [`--disable-features=${PLAYWRIGHT_DISABLED_FEATURES.join(',')}`],
-  args: [
-    `--disable-features=${PLAYWRIGHT_DISABLED_FEATURES.filter((f) => f !== 'ThirdPartyStoragePartitioning').join(',')}`,
-  ],
-};
-
 async function probe(installationId: string): Promise<Result> {
   const installation = selectInstallations(installationId)[0];
   const engine = { chromium, firefox, webkit }[installation.engine];
-  const browser = await engine.launch({
-    executablePath: installation.executablePath,
-    ...(installation.engine === 'chromium' && process.env.PLAYWRIGHT_DEFAULTS !== '1'
-      ? realPartitioning
-      : {}),
-  });
+  const browser = await engine.launch(
+    process.env.PLAYWRIGHT_DEFAULTS === '1'
+      ? { executablePath: installation.executablePath }
+      : launchOptionsFor(installation),
+  );
   const checks: Record<string, string> = {};
   try {
     const context = await browser.newContext(contextOptionsFor(installation));

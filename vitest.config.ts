@@ -11,6 +11,12 @@ const alias = { '@': fileURLToPath(new URL('./src', import.meta.url)) };
 const BROWSER_TESTS = ['tests/**/*.browser.spec.ts', 'packages/*/test/**/*.browser.spec.ts'];
 
 /**
+ * Tests named `*.e2e.spec.ts` drive several pages on several origins with
+ * Playwright directly (one browser per installation), from Node.
+ */
+const E2E_TESTS = ['packages/*/test/**/*.e2e.spec.ts'];
+
+/**
  * One browser instance per installation in playwright.config.ts that exists
  * on this machine. Select a subset with `BROWSERS=chrome,edge`.
  */
@@ -45,7 +51,17 @@ export default defineConfig({
         test: {
           name: 'node',
           include: ['tests/**/*.{spec,test}.ts', 'packages/*/test/**/*.{spec,test}.ts'],
-          exclude: ['**/node_modules/**', '**/dist/**', ...BROWSER_TESTS],
+          exclude: ['**/node_modules/**', '**/dist/**', ...BROWSER_TESTS, ...E2E_TESTS],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: 'e2e',
+          include: E2E_TESTS,
+          exclude: ['**/node_modules/**', '**/dist/**'],
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
         },
       },
       {

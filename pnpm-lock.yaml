@@ -252,6 +252,9 @@ importers:
       prettier:
         specifier: ^3.9.5
         version: 3.9.9
+      rolldown:
+        specifier: 1.2.11
+        version: 1.2.11
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'

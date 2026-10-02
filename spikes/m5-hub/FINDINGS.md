@@ -6,7 +6,7 @@ ARCHITECTURE §11.3 frames a hub page on the site's apex (`https://site/hub.html
 
 ## Setup
 
-Four tabs in one browser profile, all served by request interception (no DNS, no certificates):
+Five tabs in one browser profile, all served by request interception (no DNS, no certificates):
 
 | Tab                          | Hub runs                                                   |
 | ---------------------------- | ---------------------------------------------------------- |

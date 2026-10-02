@@ -280,6 +280,18 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/hub:
+    devDependencies:
+      '@platform/core':
+        specifier: workspace:*
+        version: link:../core
+      '@platform/notification':
+        specifier: workspace:*
+        version: link:../notification
+      '@platform/queue':
+        specifier: workspace:*
+        version: link:../queue
+
   packages/logger:
     devDependencies:
       '@platform/core':

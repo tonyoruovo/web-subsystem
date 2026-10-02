@@ -95,8 +95,6 @@ describe('createPlatform', () => {
 
     expect(platform.queue).toBeDefined();
     expect(platform.notifications).toBeDefined();
-    expect(platform.logger).toBeDefined();
-    expect(platform.consent).toBeDefined();
     expect(platform.network).toBeDefined();
     expect(platform.auth).toBeDefined();
     expect(platform.sync).toBeDefined();
@@ -147,7 +145,9 @@ describe('createPlatform', () => {
   });
 
   it('gates analytics on consent', async () => {
+    let granted = false;
     const platform = await createPlatform({
+      analyticsConsent: () => granted,
       cryptoManager: new CryptoManager({
         subtle: globalThis.crypto.subtle,
         randomBytes: (n) => globalThis.crypto.getRandomValues(new Uint8Array(n)),
@@ -157,7 +157,7 @@ describe('createPlatform', () => {
     platform.analytics.increment('page.view');
     expect(platform.analytics.getMetrics().counters).toEqual({});
 
-    platform.consent.grant('analytics');
+    granted = true;
     platform.analytics.increment('page.view');
     expect(platform.analytics.getMetrics().counters).toEqual({ 'page.view': 1 });
   });

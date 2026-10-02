@@ -4,15 +4,19 @@
  * @description
  * This is the M6 entry point. It constructs every manager in boot order,
  * wires the load-bearing integrations (the queue's admission gate to Global
- * State, storage encryption to Crypto, analytics to Consent), and returns a
+ * State, storage encryption to Crypto, analytics to a consent gate), and returns a
  * single object with a lifecycle. A fresh app calls `createPlatform`, then
  * `markReady`.
  *
  * ```text
- *   Global State -> Queue -> Notification -> Logger -> Crypto
- *     -> Storage -> Consent -> Network -> Auth -> Realtime
+ *   Global State -> Queue -> Notification -> Crypto
+ *     -> Storage -> Network -> Auth -> Realtime
  *     -> Sync -> Translation -> Analytics
  *   ```
+ *
+ * The Logger and Consent managers moved to `@platform/logger` and
+ * `@platform/consent` (M4): warnings go to `options.warn`, and analytics asks
+ * `options.analyticsConsent`, which denies by default.
  *
  * Optional injectables (storage backend, fetch, socket factory, crypto) let
  * tests and alternate environments substitute their own implementations.
@@ -29,11 +33,9 @@ import {
   type AuthUser,
 } from './auth/auth.manager';
 import { defaultQueueConfig } from './bus';
-import { ConsentManager } from './consent/consent.manager';
 import { cryptoCodec } from './crypto/crypto.codec';
 import { CryptoManager } from './crypto/crypto.manager';
 import { GlobalState } from './global/global-state.manager';
-import { Logger } from './logger/logger.manager';
 import { NetworkManager } from './network/network.manager';
 import { NotificationCenter } from './notification/notification.manager';
 import { MessageQueue } from './queue/queue.manager';
@@ -67,6 +69,10 @@ export interface PlatformOptions {
   refreshFn?: (refreshToken: string) => Promise<AuthTokens>;
   /** The analytics transport. */
   analyticsTransport?: (snapshot: AnalyticsSnapshot) => Promise<void>;
+  /** Whether analytics may collect. Defaults to `() => false`: no consent, no analytics. */
+  analyticsConsent?: () => boolean;
+  /** Receives warnings from Storage and Network. Defaults to `console.warn`. */
+  warn?: (message: string) => void;
 }
 
 /**
@@ -76,10 +82,8 @@ export interface Platform {
   readonly globalState: GlobalState;
   readonly queue: MessageQueue;
   readonly notifications: NotificationCenter;
-  readonly logger: Logger;
   readonly crypto: CryptoManager;
   readonly storage: StorageFacade | null;
-  readonly consent: ConsentManager;
   readonly network: NetworkManager;
   readonly auth: AuthManager;
   readonly realtime: RealtimeManager | null;
@@ -124,8 +128,8 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
   // 3. Notification Center
   const notifications = new NotificationCenter();
 
-  // 4. Logger
-  const logger = new Logger();
+  // 4. Warnings, until the platform runs on the kernel (M10).
+  const warn = options.warn ?? ((message: string) => console.warn(message));
 
   // 5. Crypto
   const crypto = options.cryptoManager ?? new CryptoManager();
@@ -139,17 +143,14 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
       config: options.storageConfig,
       secure: options.secure ?? false,
       codec: options.secure ? cryptoCodec(crypto) : undefined,
-      warn: { warn: (m) => logger.log('WARN', m) },
+      warn: { warn },
     });
   }
-
-  // 7. Consent
-  const consent = new ConsentManager();
 
   // 8. Network
   const network = new NetworkManager({
     fetchFn: options.fetchFn,
-    warn: { warn: (m) => logger.log('WARN', m) },
+    warn: { warn },
   });
 
   // 9. Auth
@@ -166,20 +167,18 @@ export async function createPlatform(options: PlatformOptions = {}): Promise<Pla
   // 12. Translation
   const translation = new TranslationManager();
 
-  // 13. Analytics, gated by Consent.
+  // 13. Analytics, gated by consent; fails closed.
   const analytics = new AnalyticsManager({
     transport: options.analyticsTransport,
-    consent: () => consent.isGranted('analytics'),
+    consent: options.analyticsConsent ?? (() => false),
   });
 
   return {
     globalState,
     queue,
     notifications,
-    logger,
     crypto,
     storage,
-    consent,
     network,
     auth,
     realtime,

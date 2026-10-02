@@ -37,7 +37,7 @@ export interface UserSettings {
 /**
  * @summary The minimal consent surface the settings manager needs.
  * @description
- * The {@linkcode ConsentManager} satisfies this. An interface keeps the
+ * `@platform/consent`'s control commands satisfy this. An interface keeps the
  * settings manager testable without coupling to a concrete manager.
  */
 export interface ConsentSurface {

@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * @fileoverview
  * @summary M5 gate: a Window broadcast from a.<site> reaches b.<site>, and foreign origins are refused.
@@ -38,7 +39,7 @@ import {
   contextOptionsFor,
   launchOptionsFor,
   selectInstallations,
-} from '../../../playwright.config.ts';
+} from '../../../playwright.config';
 import { renderHubPage, type HubPage } from '../src';
 
 const SITE = ['https://site.test', 'https://*.site.test'];

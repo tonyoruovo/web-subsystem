@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * @fileoverview
  * @summary Every browser installation the test matrix can run on.

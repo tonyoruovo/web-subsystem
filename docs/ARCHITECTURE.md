@@ -105,7 +105,7 @@ The README says an initializer "pushes the token used to initialize it". In this
 
 ### 3.3 Kernel
 
-The kernel (`@platform/core`) registers subsystem definitions, validates the dependency graph, and runs every unit's lifecycle. Until the Queue exists (M3), it delivers packets through a pluggable **packet router**; the Queue becomes the router in M3.
+The kernel (`@platform/core`) registers subsystem definitions, validates the dependency graph, and runs every unit's lifecycle. It delivers packets through a pluggable **packet router**: a direct in-realm router by default, the Queue in an application (§10.1).
 
 - A unit whose required dependency is not met stays `UNINITIALIZED` and reports what it is `waitingFor`. It starts as soon as the dependency is met (§7.1).
 - A unit with `features` reports `DEGRADED` while any feature is not running.
@@ -184,6 +184,8 @@ interface View<T> {
 - Snapshots are immutable, and their identity is stable while the value is unchanged. React's `useSyncExternalStore` needs exactly this, and Vue can wrap it in a `shallowRef` updated by `subscribe`.
 - Notifications are batched per task, so a burst of state changes causes one re-render.
 - Subscribing never starts work. Unsubscribing never stops work that a command started.
+- A view is a **snapshot**, not a stream: a listener sees the latest value, not every intermediate one, and bounded lists drop old items between notifications. A consumer that needs every item (the Logger) uses an `observe` command, which pushes each one (§17).
+- Bounded lists (logs, histories, trails) use `createRingBuffer`, which builds the frozen snapshot only when it is read after a change.
 
 ---
 
@@ -211,13 +213,14 @@ interface Dependency {
 
 ### 7.2 Late binding for centralized subsystems
 
-Centralized subsystems start before the subsystems they eventually use. Examples: the Logger needs the NotificationCenter, the Queue's dead-letter store needs Storage, and GlobalState restore needs Storage. A centralized unit declares such a dependency as **late-bound**:
+Some units start before the subsystems they eventually use. Examples: the Logger needs the NotificationCenter and Storage, the Queue's dead-letter store needs Storage, and GlobalState restore needs Storage. Such a unit declares the dependency as `optional` and binds to it **late**:
 
-- Before the target is `READY`, writes go to a bounded in-memory buffer.
+- Before the target is `READY`, writes go to a bounded in-memory buffer (`LateBinding`).
 - When the target becomes `READY`, the buffer drains in order.
-- On overflow, the oldest entries are dropped and a fingerprint records the drop count.
+- On overflow, the oldest entries are dropped and counted.
+- `ctx.watch(target, listener)` tells the unit when the target starts, stops, or restarts with a new control interface, so it can bind and unbind itself (added in M4, §17). A sink can also be bound from outside with a `bindSink`-style command.
 
-This one mechanism covers the Logger ring buffer, dead-letter persistence, and GlobalState restore.
+This one mechanism covers the Logger's sink, dead-letter persistence, and GlobalState restore.
 
 ### 7.3 Mapping to npm
 
@@ -519,7 +522,7 @@ Shutdown runs disposers in reverse order. Persisting state is part of each unit'
 | Logger | featurized | Tab | virtual | — (late-bound: NotificationCenter, Storage) | `logger` |
 | Crypto | featurized | Tab (key cache shared per origin) | shared → dedicated → virtual | — | `crypto` |
 | Storage | featurized | Tab (coordinator shared per origin) | shared → virtual | — (optional: Crypto) | `storage`, backends |
-| Consent | featurized | Window | virtual | Storage | `consent` |
+| Consent | featurized | Window (Tab until M5) | virtual | — (grants persist through the kernel's persistence, which Storage backs from M6) | `consent` |
 | Settings | featurized | Window | virtual | Consent | `settings` |
 | Network | featurized | Tab | virtual | GlobalState | `network` |
 | Auth | featurized | Window | virtual (crypto delegated) | Storage, Network | `auth` |
@@ -590,7 +593,25 @@ An adapter exists only where a framework can do something better than the neutra
 | `global` | Replace `BasePacket` (`eventId: symbol`, inline callbacks) with the envelope and callback split (§9.1). Derive the platform status (§4). |
 | `notification` | Remove the event queue, retry, and dead-letter logic. Delegate to the Queue (§10). |
 | `queue` | The NotificationCenter does not poll the Queue. The Queue pushes broadcasts to it (§10). Dead letters are late-bound to Storage (§7.2). |
-| `logger` | No required dependencies. NotificationCenter and Storage are late-bound (§7.2). |
+| `logger` | No required dependencies. NotificationCenter and Storage are late-bound (§7.2). Trimmed in M4 (see the proposal's amendments). |
+| `consent` | Grants persist through the kernel's persistence, not a direct Storage dependency. Retention and data-subject requests wait for Storage (M6). |
 | `auth` | Remove `credentialCache.hashedPassword`. Password hashing belongs on the server. |
 | `crypto` | Keep the rule that Crypto has no Network dependency (§7.1). |
 | `design-system` | The proposal is empty and must be written before its milestone. |
+
+---
+
+## 17. Pilot retrospective (M4)
+
+Porting the Logger and Consent onto the kernel tested the unit contract on real subsystems. What caused friction, and what changed:
+
+| Friction | Change |
+|---|---|
+| A late-bound unit had a buffer (`LateBinding`) but no way to notice its target start or stop, so something outside had to bind it. | `ctx.watch(target, listener)`: called at once and whenever the target's control interface changes; stops on teardown (§7.2). |
+| Errors a unit recovers from (a failed sink write, a refused broadcast) had nowhere to go but `console`. | `ctx.report(error)`: sends it to the kernel's `onError` without changing the lifecycle. |
+| Views are snapshots: between notifications, the Queue's `trails` and the Notification Center's `history` can drop records, so a log built on them loses some. | `observe(observer)` on the Queue and the Notification Center pushes every record (§6.1). |
+| A bounded list in `createStore` copied and froze the whole array on every append. | `createRingBuffer` in core; the Queue's trails, the Notification Center's history and the Logger's rings use it. |
+| What `init` builds (the Logger's `log` function, which needs the context) is not reachable from `control` except through a closure variable. | No change yet. The closure is simple and local; revisit if more subsystems need it. |
+| The catalogue made Consent require Storage, which does not exist until M6. | Persisted state already goes through the kernel's `persistence`; Storage will back that adapter. Consent has no required dependency (§13). |
+
+The unit shape itself (state with a policy, views, commands, optional dependencies, `receive` and `subscribes`) needed no change.

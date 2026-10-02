@@ -1,3 +1,12 @@
+> **Amendments (M4, 2026-10-02).** These override the text below wherever they conflict. See [ARCHITECTURE §7.2](../docs/ARCHITECTURE.md#72-late-binding-for-centralized-subsystems) and [§17](../docs/ARCHITECTURE.md#17-pilot-retrospective-m4).
+>
+> - The Logger is a featurized, Tab-scoped subsystem with **no required dependency**. It follows the Queue and the Notification Center with `ctx.watch` and receives every settled packet and every broadcast through their `observe` commands.
+> - Trails are joined by `traceId` (`commands.trace`); a trail from another tab or a server is added with `recordTrail`.
+> - Entries go to a sink through a `LateBinding` (`bindSink`), which Storage binds from M6. Persistence, rotation and compression belong to that sink.
+> - Kept: level filter (global and per subsystem, persisted), sanitization, a bounded ring, query, JSON and text export, an optional console mirror.
+> - Dropped for now: the analytics aggregator, the real-time stream, CSV export, `maxAge`, and Visibility-based throttling. They return only if a later subsystem needs them.
+> - No worker: the Logger runs on the main thread (virtual host).
+
 
 # Logger Manager
 Soon to be integrated into the notification center

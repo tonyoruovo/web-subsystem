@@ -1,0 +1,120 @@
+[
+  {
+    "installation": "chrome",
+    "version": "154.0.8037.92",
+    "checks": {
+      "channel": "true",
+      "channel a→b": "shared",
+      "channel a→apex": "shared",
+      "channel a→a (2nd tab, same origin)": "shared",
+      "channel apex→a": "shared",
+      "channel a→other.test (control)": "partitioned",
+      "localStorage a→b": "shared",
+      "localStorage a→apex": "shared",
+      "localStorage a→other.test (control)": "partitioned",
+      "indexedDB a→b": "shared",
+      "indexedDB a→apex": "shared",
+      "sharedWorker a→b": "shared",
+      "sharedWorker a→apex": "shared",
+      "hasStorageAccess (iframe in a)": "true"
+    }
+  },
+  {
+    "installation": "system-chromium",
+    "version": "147.0.7704.0",
+    "checks": {
+      "channel": "true",
+      "channel a→b": "shared",
+      "channel a→apex": "shared",
+      "channel a→a (2nd tab, same origin)": "shared",
+      "channel apex→a": "shared",
+      "channel a→other.test (control)": "partitioned",
+      "localStorage a→b": "shared",
+      "localStorage a→apex": "shared",
+      "localStorage a→other.test (control)": "partitioned",
+      "indexedDB a→b": "shared",
+      "indexedDB a→apex": "shared",
+      "sharedWorker a→b": "shared",
+      "sharedWorker a→apex": "shared",
+      "hasStorageAccess (iframe in a)": "true"
+    }
+  },
+  {
+    "installation": "edge",
+    "version": "154.0.4258.37",
+    "checks": {
+      "channel": "true",
+      "channel a→b": "shared",
+      "channel a→apex": "shared",
+      "channel a→a (2nd tab, same origin)": "shared",
+      "channel apex→a": "shared",
+      "channel a→other.test (control)": "partitioned",
+      "localStorage a→b": "shared",
+      "localStorage a→apex": "shared",
+      "localStorage a→other.test (control)": "partitioned",
+      "indexedDB a→b": "shared",
+      "indexedDB a→apex": "shared",
+      "sharedWorker a→b": "shared",
+      "sharedWorker a→apex": "shared",
+      "hasStorageAccess (iframe in a)": "true"
+    }
+  },
+  {
+    "installation": "chromium",
+    "version": "-",
+    "checks": {},
+    "error": "launch failed: browserType.launch: spawn UNKNOWN"
+  },
+  {
+    "installation": "firefox",
+    "version": "-",
+    "checks": {},
+    "error": "launch failed: browserType.launch: spawn UNKNOWN"
+  },
+  {
+    "installation": "webkit",
+    "version": "26.6",
+    "checks": {
+      "channel": "true",
+      "channel a→b": "PARTITIONED",
+      "channel a→apex": "PARTITIONED",
+      "channel a→a (2nd tab, same origin)": "shared",
+      "channel apex→a": "PARTITIONED",
+      "channel a→other.test (control)": "partitioned",
+      "localStorage a→b": "shared",
+      "localStorage a→apex": "shared",
+      "localStorage a→other.test (control)": "shared",
+      "indexedDB a→b": "PARTITIONED",
+      "indexedDB a→apex": "PARTITIONED",
+      "sharedWorker a→b": "PARTITIONED",
+      "sharedWorker a→apex": "PARTITIONED",
+      "hasStorageAccess (iframe in a)": "false"
+    }
+  },
+  {
+    "installation": "mobile-chromium",
+    "version": "-",
+    "checks": {},
+    "error": "launch failed: browserType.launch: spawn UNKNOWN"
+  },
+  {
+    "installation": "mobile-webkit",
+    "version": "26.6",
+    "checks": {
+      "channel": "true",
+      "channel a→b": "PARTITIONED",
+      "channel a→apex": "PARTITIONED",
+      "channel a→a (2nd tab, same origin)": "shared",
+      "channel apex→a": "PARTITIONED",
+      "channel a→other.test (control)": "partitioned",
+      "localStorage a→b": "shared",
+      "localStorage a→apex": "shared",
+      "localStorage a→other.test (control)": "shared",
+      "indexedDB a→b": "PARTITIONED",
+      "indexedDB a→apex": "PARTITIONED",
+      "sharedWorker a→b": "PARTITIONED",
+      "sharedWorker a→apex": "PARTITIONED",
+      "hasStorageAccess (iframe in a)": "false"
+    }
+  }
+]

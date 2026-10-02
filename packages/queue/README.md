@@ -70,6 +70,9 @@ const { commands, views } = kernel.unit<QueueControl>('queue').control!;
 views.state.subscribe(() => console.log(views.state.getSnapshot())); // depth, inFlight, ...
 await commands.bindDeadLetterSink((letter) => storage.commands.append('dead-letters', letter));
 commands.replay(messageId);
+
+// `views.trails` keeps the last `trailHistory` packets; observe to see every one (the Logger does).
+const stop = commands.observe((settled) => archive(settled));
 ```
 
 ## Behaviour

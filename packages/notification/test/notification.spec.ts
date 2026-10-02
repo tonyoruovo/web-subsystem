@@ -200,6 +200,25 @@ describe('fanOut', () => {
     expect(history[0].messageId).not.toBe(history[1].messageId);
   });
 
+  it('pushes every record to observers, and reports an observer that throws', async () => {
+    const { platform, control, fanOut } = await setup([], { historySize: 1 });
+    const seen: string[] = [];
+    const stop = control.commands.observe((record) => void seen.push(record.outcome));
+    control.commands.observe(() => {
+      throw new Error('observer bug');
+    });
+    await fanOut(broadcast('x'));
+    await fanOut(broadcast('x'));
+    stop();
+    await fanOut(broadcast('x'));
+    expect(seen).toEqual(['fanned-out', 'fanned-out']);
+    expect(platform.errors.map((e) => (e.error as Error).message)).toEqual([
+      'observer bug',
+      'observer bug',
+      'observer bug',
+    ]);
+  });
+
   it('refuses to fan out while not running', async () => {
     const notification = createNotificationCenter();
     const platform = createTestPlatform([notification.subsystem]);

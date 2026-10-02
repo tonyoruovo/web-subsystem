@@ -296,7 +296,10 @@ export interface QueueData {
  * @description
  * `replay(messageId)` sends a dead letter again; `bindDeadLetterSink(sink)`
  * writes buffered and future dead letters to a sink (Storage, from M6);
- * `unbindDeadLetterSink()` goes back to buffering. Views: `state` (counters),
+ * `unbindDeadLetterSink()` goes back to buffering; `observe(observer)` calls
+ * `observer` with every settled packet (the `trails` view keeps only the last
+ * ones, so a log must observe) and returns the function that stops it.
+ * Views: `state` (counters),
  * `trails` (recently settled packets) and `deadLetters`.
  *
  * @example
@@ -318,6 +321,7 @@ export interface QueueControl {
     replay(messageId: string): boolean;
     bindDeadLetterSink(sink: (letter: DeadLetter) => void | Promise<void>): Promise<void>;
     unbindDeadLetterSink(): void;
+    observe(observer: (settled: SettledPacket) => void): () => void;
   };
   readonly views: {
     readonly state: View<Partial<QueueData>>;

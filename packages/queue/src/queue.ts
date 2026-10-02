@@ -59,6 +59,7 @@ import {
   appendFingerprint,
   assertSendAllowed,
   computeBackoff,
+  createRingBuffer,
   createScheduler,
   createStore,
   defineSubsystem,
@@ -190,7 +191,8 @@ export function createQueue(options: QueueOptions = {}): Queue {
   const tiers = new Map<Importance, Item[]>(TIERS.map((tier) => [tier, []]));
   const retrying = new Set<Item>();
   const busyKeys = new Set<string>();
-  const trails = createStore<readonly SettledPacket[]>([]);
+  const trails = createRingBuffer<SettledPacket>(trailHistory);
+  const observers = new Set<(settled: SettledPacket) => void>();
   const deadLetters = createStore<readonly DeadLetter[]>([]);
   const sink = new LateBinding<DeadLetter>({ capacity: deadLetterCapacity });
   let context: UnitContext<QueueData> | null = null;
@@ -232,13 +234,24 @@ export function createQueue(options: QueueOptions = {}): Queue {
     trail: FingerprintTrail = envelope.fingerprints,
   ) => {
     const { messageId, traceId, source, target } = envelope.metadata;
-    trails.set(
-      bounded(
-        trails.view.getSnapshot(),
-        { messageId, traceId, eventId: envelope.eventId, source, target, outcome, reason, trail },
-        trailHistory,
-      ),
-    );
+    const settled: SettledPacket = {
+      messageId,
+      traceId,
+      eventId: envelope.eventId,
+      source,
+      target,
+      outcome,
+      reason,
+      trail,
+    };
+    trails.push(settled);
+    for (const observer of [...observers]) {
+      try {
+        observer(settled);
+      } catch (error) {
+        context?.report(error);
+      }
+    }
   };
 
   const admission = () => context?.dependency<AdmissionControl>('global-state');
@@ -510,6 +523,10 @@ export function createQueue(options: QueueOptions = {}): Queue {
         bindDeadLetterSink: (deadLetterSink: (letter: DeadLetter) => void | Promise<void>) =>
           sink.bind(deadLetterSink),
         unbindDeadLetterSink: () => sink.unbind(),
+        observe(observer: (settled: SettledPacket) => void) {
+          observers.add(observer);
+          return () => void observers.delete(observer);
+        },
       },
       views: { state: ctx.state.readable, trails: trails.view, deadLetters: deadLetters.view },
     }),

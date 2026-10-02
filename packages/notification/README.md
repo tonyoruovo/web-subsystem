@@ -64,6 +64,9 @@ const stop = commands.subscribe('auth:login', (payload) => showWelcome(payload),
   maxExecutions: 1,
 });
 views.history.subscribe(() => console.table(views.history.getSnapshot()));
+
+// The history keeps the last `historySize` records; observe to see every one.
+const stopObserving = commands.observe((record) => archive(record));
 ```
 
 ## Behaviour

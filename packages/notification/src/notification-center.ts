@@ -49,7 +49,7 @@
 import {
   UnitUnavailableError,
   appendFingerprint,
-  createStore,
+  createRingBuffer,
   defineSubsystem,
   makeFingerprint,
   type FingerprintTrail,
@@ -236,7 +236,9 @@ export interface NotificationData {
  *
  * @description
  * `registerEvent` adds or replaces an event definition. `subscribe` adds a
- * programmatic subscription and returns its unsubscribe function. Views:
+ * programmatic subscription and returns its unsubscribe function. `observe`
+ * calls an observer with every history record (the view keeps only the last
+ * ones) and returns the function that stops it. Views:
  * `state` (counters) and `history` (the last broadcasts, oldest first).
  *
  * @example
@@ -258,6 +260,7 @@ export interface NotificationControl {
   readonly commands: {
     registerEvent(definition: EventDefinition): void;
     subscribe(eventId: string, listener: EventListener, options?: SubscriptionOptions): () => void;
+    observe(observer: (record: BroadcastRecord) => void): () => void;
   };
   readonly views: {
     readonly state: View<Partial<NotificationData>>;
@@ -433,16 +436,24 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
     resetTimeoutMs: options.resetTimeoutMs ?? 30_000,
     now,
   });
-  const history = createStore<readonly BroadcastRecord[]>([]);
+  const history = createRingBuffer<BroadcastRecord>(historySize);
+  const observers = new Set<(record: BroadcastRecord) => void>();
   let counters: ((update: (s: NotificationData) => void) => void) | null = null;
+  let report: (error: unknown) => void = () => {};
   let nextKey = 0;
 
   const allowed = (list: readonly string[] | undefined, id: string) =>
     list === undefined || list.includes(id);
 
   const remember = (record: BroadcastRecord) => {
-    const next = [...history.view.getSnapshot(), record];
-    history.set(next.length > historySize ? next.slice(next.length - historySize) : next);
+    history.push(record);
+    for (const observer of [...observers]) {
+      try {
+        observer(record);
+      } catch (error) {
+        report(error);
+      }
+    }
   };
 
   const fingerprint = (actionName: string, extra: Parameters<typeof makeFingerprint>[2] = {}) =>
@@ -584,8 +595,10 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
     },
     init(ctx) {
       counters = (update) => ctx.state.update(update);
+      report = (error) => ctx.report(error);
       return () => {
         counters = null;
+        report = () => {};
       };
     },
     control: (ctx) => ({
@@ -612,6 +625,10 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
           subscriptions.push(subscription);
           ctx.state.update((s) => void (s.subscriptions = subscriptions.length));
           return () => removeSubscription(subscription);
+        },
+        observe(observer: (record: BroadcastRecord) => void) {
+          observers.add(observer);
+          return () => void observers.delete(observer);
         },
       },
       views: { state: ctx.state.readable, history: history.view },

@@ -179,6 +179,24 @@ describe('requests', () => {
   });
 });
 
+describe('observe', () => {
+  it('pushes every settled packet, beyond the trails view, and reports a throwing observer', async () => {
+    const { port, control, errors } = await setup({ options: { trailHistory: 1 } });
+    const seen: string[] = [];
+    const stop = control.commands.observe((settled) => void seen.push(settled.eventId));
+    control.commands.observe(() => {
+      throw new Error('observer bug');
+    });
+    await port.send({ eventId: 'a', payload: null, target: 'echo' });
+    await port.send({ eventId: 'b', payload: null, target: 'echo' });
+    stop();
+    await port.send({ eventId: 'c', payload: null, target: 'echo' });
+    expect(seen).toEqual(['a', 'b']);
+    expect(control.views.trails.getSnapshot().map((p) => p.eventId)).toEqual(['c']);
+    expect(errors).toHaveLength(3);
+  });
+});
+
 describe('retries and dead letters', () => {
   it('retries while the target is suspended, then delivers', async () => {
     const { kernel, port, control } = await setup({ options: { retryBaseMs: 50 } });

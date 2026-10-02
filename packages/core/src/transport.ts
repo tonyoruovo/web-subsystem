@@ -111,7 +111,15 @@ export interface Transport {
    * @returns {() => void} Removes the handler, if it is still the active one.
    */
   onEnvelope(handler: EnvelopeHandler): () => void;
-  /** Closes this side. Pending requests reject. */
+  /**
+   * @summary Closes this side of the transport.
+   * @description Pending requests reject with `RpcClosedError`.
+   * @example
+   * Closing at teardown
+   * ```ts
+   * return () => transport.close();
+   * ```
+   */
   close(): void;
 }
 

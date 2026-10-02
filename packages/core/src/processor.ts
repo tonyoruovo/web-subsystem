@@ -95,13 +95,45 @@ export type HostKind = 'shared' | 'dedicated' | 'virtual';
  * @public
  */
 export interface ProcessorScope {
-  /** The host the processor is running on. */
+  /**
+   * @summary The host that runs the processor: `shared`, `dedicated` or `virtual`.
+   */
   readonly host: HostKind;
-  /** True when the current slice has used up its budget (ARCHITECTURE §8.6). */
+  /**
+   * @summary Tells if the current slice used its time budget (ARCHITECTURE §8.6).
+   * @description On a worker host it is always `false`. On the virtual host it
+   * becomes `true` after `sliceBudgetMs`, so long work can give the main thread back.
+   * @example
+   * A loop that stays responsive
+   * ```ts
+   * for (const item of items) {
+   *   work(item);
+   *   if (scope.shouldYield()) await scope.yield();
+   * }
+   * ```
+   * @returns {boolean} `true` when the processor should call `yield`.
+   */
   shouldYield(): boolean;
-  /** Gives the thread back, then continues with a fresh slice. */
+  /**
+   * @summary Gives the thread back, then continues with a new slice.
+   * @example
+   * Yielding between batches
+   * ```ts
+   * await scope.yield();
+   * ```
+   * @returns {Promise<void>} Resolves when the new slice starts.
+   */
   yield(): Promise<void>;
-  /** Sends a one-way message to the owning unit (a Notifier's output). */
+  /**
+   * @summary Sends a one-way message to the unit that owns the processor.
+   * @description A `Notifier` job uses it for its output. The message must be structured-cloneable.
+   * @example
+   * Reporting progress
+   * ```ts
+   * scope.post({ progress: done / total });
+   * ```
+   * @param {unknown} message The message.
+   */
   post(message: unknown): void;
 }
 
@@ -138,11 +170,40 @@ export interface ProcessorScope {
  * @public
  */
 export interface ProcessorModule<In = unknown, Out = unknown> {
-  /** Runs once when the host starts. */
+  /**
+   * @summary Prepares the processor. The host calls it one time, when it starts.
+   * @example
+   * Opening a cache
+   * ```ts
+   * setup: async () => void (cache = await caches.open('thumbnails')),
+   * ```
+   * @param {ProcessorScope} scope The scope of the processor.
+   * @returns {void | Promise<void>} Resolves when the processor is ready.
+   */
   setup?(scope: ProcessorScope): void | Promise<void>;
-  /** Handles one structured-cloneable message and returns the result. */
+  /**
+   * @summary Handles one message and returns the result.
+   * @description The message and the result must be structured-cloneable,
+   * because they can cross a worker boundary.
+   * @example
+   * Adding numbers
+   * ```ts
+   * handle: ({ items }) => items.reduce((sum, n) => sum + n, 0),
+   * ```
+   * @param {In} message The message.
+   * @param {ProcessorScope} scope The scope of the processor.
+   * @returns {Out | Promise<Out>} The result.
+   */
   handle(message: In, scope: ProcessorScope): Out | Promise<Out>;
-  /** Runs when the host stops. */
+  /**
+   * @summary Releases what `setup` got. The host calls it when it stops.
+   * @example
+   * Closing a database
+   * ```ts
+   * teardown: () => db.close(),
+   * ```
+   * @returns {void | Promise<void>} Resolves when the processor is released.
+   */
   teardown?(): void | Promise<void>;
 }
 
@@ -179,9 +240,15 @@ export type ProcessorJob = 'sink' | 'scheduler' | 'notifier';
  * @public
  */
 export interface HeartbeatOptions {
-  /** Time between pings, in milliseconds. */
+  /**
+   * @summary The time between two pings, in milliseconds.
+   */
   readonly intervalMs: number;
-  /** How long a ping may stay unanswered, in milliseconds. */
+  /**
+   * @summary The longest time to wait for the answer to a ping, in milliseconds.
+   * @description A ping without an answer in this time is a missed heartbeat,
+   * and the runner fails over to the next host.
+   */
   readonly timeoutMs: number;
 }
 
@@ -230,26 +297,55 @@ export interface HeartbeatOptions {
  * @public
  */
 export interface ProcessorDef<In = unknown, Out = unknown> {
-  /** Unique inside the unit. */
+  /**
+   * @summary The id of the processor. It must be unique in the unit.
+   * @description The unit gets the processor with `ctx.processor(id)`.
+   */
   readonly id: string;
-  /** What the processor does with packets. */
+  /**
+   * @summary What the processor does with packets (ARCHITECTURE §8.4).
+   */
   readonly job: ProcessorJob;
-  /** Hosts in order of preference. Must end with `virtual` (ARCHITECTURE §8.3). */
+  /**
+   * @summary The hosts to try, in order of preference.
+   * @description The list must end with `virtual`, which is always available
+   * (ARCHITECTURE §8.3). The runner fails over along this list.
+   */
   readonly hosts: readonly HostKind[];
-  /** Loads the module for the virtual host. */
+  /**
+   * @summary Loads the module for the virtual host.
+   * @description Use a dynamic `import()`, so the module loads only when the virtual host runs.
+   */
   readonly load: () => Promise<ProcessorModule<In, Out>>;
   /**
-   * Creates the dedicated worker. Write it literally, so bundlers detect it:
+   * @summary Makes the dedicated worker.
+   * @description Write it as a literal, so bundlers find the worker file:
    * `() => new Worker(new URL('./x.worker.ts', import.meta.url), { type: 'module' })`.
    */
   readonly dedicated?: () => Worker;
-  /** Creates the shared worker, the same way. */
+  /**
+   * @summary Makes the shared worker.
+   * @description Write it as a literal, as for `dedicated`, with `SharedWorker`.
+   */
   readonly shared?: () => SharedWorker;
-  /** How long a worker may take to answer the handshake. Default 5000 ms. */
+  /**
+   * @summary The longest time for a worker to answer the handshake, in milliseconds.
+   * @description The default is 5000. After this time, the runner fails over to the next host.
+   */
   readonly handshakeTimeoutMs?: number;
-  /** Heartbeat for physical hosts. Default: on for shared hosts, off for dedicated hosts. */
+  /**
+   * @summary The heartbeat for worker hosts.
+   * @description By default, shared hosts use {@linkcode DEFAULT_SHARED_HEARTBEAT}
+   * and dedicated hosts have no heartbeat. Use `false` to turn a heartbeat off.
+   */
   readonly heartbeat?: {
+    /**
+     * @summary The heartbeat for a shared worker, or `false` for none.
+     */
     readonly shared?: HeartbeatOptions | false;
+    /**
+     * @summary The heartbeat for a dedicated worker, or `false` for none.
+     */
     readonly dedicated?: HeartbeatOptions | false;
   };
 }

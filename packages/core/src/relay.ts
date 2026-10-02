@@ -60,9 +60,20 @@ import type { Scope } from './scope';
  * @public
  */
 export interface ScopeRelay {
+  /**
+   * @summary The scope that the relay carries: `window` or `global`.
+   * @description The NotificationCenter keeps one relay for each scope.
+   */
   readonly scope: Scope;
   /**
    * @summary Sends one envelope beyond this tab.
+   * @description The relay must not throw for a transport failure. It buffers,
+   * retries or drops the envelope, and reports the problem in its own status.
+   * @example
+   * The Window transport as a relay
+   * ```ts
+   * notification.commands.attachRelay({ scope: 'window', publish: (e) => client.publish(e) });
+   * ```
    * @param {PacketEnvelope} envelope A broadcast of the relay's scope, sent from this tab.
    */
   publish(envelope: PacketEnvelope): void;
@@ -89,10 +100,18 @@ export interface ScopeRelay {
  * @public
  */
 export interface Deduplicator {
-  /** The most ids remembered. */
+  /**
+   * @summary The largest number of ids that the deduplicator remembers.
+   * @description When it is full, it forgets the oldest id.
+   */
   readonly capacity: number;
   /**
    * @summary Records an id and says whether it was already remembered.
+   * @example
+   * Delivering each envelope one time
+   * ```ts
+   * if (!dedupe.seen(envelope.metadata.messageId)) deliver(envelope);
+   * ```
    * @param {string} id A message id.
    * @returns {boolean} `true` for a repeat.
    */

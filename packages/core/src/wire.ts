@@ -163,14 +163,22 @@ export type WireEnvelope = z.infer<typeof WireEnvelopeSchema>;
  * @public
  */
 export class WireProtocolError extends Error {
+  /**
+   * @summary The name of the error class: `'WireProtocolError'`.
+   */
   override readonly name = 'WireProtocolError';
 
   /**
+   * @summary Creates the error for one refused envelope.
    * @param {string} message What went wrong.
    * @param {readonly z.core.$ZodIssue[]} [issues] The schema violations, if any.
    */
   constructor(
     message: string,
+    /**
+     * @summary The schema violations, as zod reports them.
+     * @description The list is empty when the input is not JSON or has the wrong version.
+     */
     readonly issues: readonly z.core.$ZodIssue[] = [],
   ) {
     super(message);

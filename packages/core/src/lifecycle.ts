@@ -188,16 +188,29 @@ export function canTransition(from: UnitStatus, to: UnitStatus): boolean {
  * @public
  */
 export class IllegalTransitionError extends Error {
+  /**
+   * @summary The name of the error class: `'IllegalTransitionError'`.
+   */
   override readonly name = 'IllegalTransitionError';
 
   /**
-   * @param {string} unitId The unit's full id.
-   * @param {UnitStatus} from The status it was in.
-   * @param {UnitStatus} to The status it was asked to move to.
+   * @summary Creates the error for one refused transition.
+   * @param {string} unitId The full id of the unit.
+   * @param {UnitStatus} from The current status.
+   * @param {UnitStatus} to The status that was asked for.
    */
   constructor(
+    /**
+     * @summary The full id of the unit.
+     */
     readonly unitId: string,
+    /**
+     * @summary The status of the unit when the transition was asked for.
+     */
     readonly from: UnitStatus,
+    /**
+     * @summary The status that the transition table does not allow from `from`.
+     */
     readonly to: UnitStatus,
   ) {
     super(`[${unitId}] Illegal lifecycle transition ${from} -> ${to}.`);
@@ -231,13 +244,24 @@ export class IllegalTransitionError extends Error {
  * @see {@linkcode Lifecycle}
  */
 export interface LifecycleSnapshot {
-  /** The current status. */
+  /**
+   * @summary The current status of the unit.
+   */
   readonly status: UnitStatus;
-  /** Why the unit is in this status (the error message, the suspension cause), or `null`. */
+  /**
+   * @summary Why the unit has this status, or `null`.
+   * @description For `FAILED`, it is the error message. For `SUSPENDED`, it is
+   * the cause of the suspension, for example `Waiting for storage.`
+   */
   readonly reason: string | null;
-  /** Unmet required dependencies, while the unit waits to start (ARCHITECTURE §7.1). */
+  /**
+   * @summary The unmet required dependencies, while the unit waits to start (ARCHITECTURE §7.1).
+   * @description The list is empty when the unit does not wait.
+   */
   readonly waitingFor: readonly string[];
-  /** Ids of features that are not running, while the unit is `DEGRADED`. */
+  /**
+   * @summary The ids of the features that do not run, while the unit is `DEGRADED`.
+   */
   readonly offFeatures: readonly string[];
 }
 

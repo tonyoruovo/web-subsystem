@@ -142,14 +142,28 @@ export interface PacketRouter {
  * @public
  */
 export class UnitUnavailableError extends Error {
+  /**
+   * @summary The name of the error class: `'UnitUnavailableError'`.
+   */
   override readonly name = 'UnitUnavailableError';
 
   /**
-   * @param {string} unitId The target.
-   * @param {string} status Why it cannot receive: a status or a short reason.
+   * @summary Creates the error for one target.
+   * @param {string} unitId The id of the target.
+   * @param {string} status The reason: a lifecycle status or a short text.
    */
   constructor(
+    /**
+     * @summary The id of the target that cannot receive the packet.
+     */
     readonly unitId: string,
+    /**
+     * @summary Why the target cannot receive the packet.
+     * @description It is a lifecycle status (for example `SUSPENDED`) when the
+     * target exists but does not run. Otherwise it is a short text: `unknown`,
+     * `features are not addressable` or `it does not receive packets`. The
+     * Queue retries only for a lifecycle status.
+     */
     readonly status: string,
   ) {
     super(`Subsystem "${unitId}" cannot receive packets (${status}).`);
@@ -175,6 +189,9 @@ export class UnitUnavailableError extends Error {
  * @public
  */
 export class PacketExpiredError extends Error {
+  /**
+   * @summary The name of the error class: `'PacketExpiredError'`.
+   */
   override readonly name = 'PacketExpiredError';
 }
 
@@ -209,19 +226,41 @@ export class PacketExpiredError extends Error {
  * @public
  */
 export interface KernelOptions {
-  /** Builds the packet router. Defaults to {@linkcode directRouter}. */
+  /**
+   * @summary Builds the packet router from the kernel.
+   * @description The default is {@linkcode directRouter}. An application gives `queue.router` here.
+   */
   readonly router?: (kernel: Kernel) => PacketRouter;
-  /** Loads and saves persisted unit state. */
+  /**
+   * @summary Loads and saves the persisted state of units.
+   * @description The kernel loads the state before `init` and saves it at
+   * teardown. Without it, no state survives a reload.
+   */
   readonly persistence?: StatePersistence;
-  /** Errors with no caller to throw to. Defaults to `console.error`. */
+  /**
+   * @summary Receives the errors that have no caller to go to.
+   * @description Examples are a subscriber that throws, a failed `init`, and
+   * `ctx.report`. The default writes to `console.error`.
+   */
   readonly onError?: (error: unknown, unitId: string) => void;
-  /** Id source for packets. Defaults to `crypto.randomUUID`. */
+  /**
+   * @summary Makes the ids of packets and spans.
+   * @description The default is `crypto.randomUUID`. Tests give a counter to get stable ids.
+   */
   readonly ids?: IdFactory;
-  /** Clock. Defaults to `Date.now`. */
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
-  /** View notification scheduling. Defaults to `queueMicrotask`. */
+  /**
+   * @summary Schedules the notifications of views.
+   * @description The default is `queueMicrotask`, so a view notifies one time for each task.
+   */
   readonly schedule?: Schedule;
-  /** Scheduler, worker budget and slice budget for processors (ARCHITECTURE §8). */
+  /**
+   * @summary The scheduler, worker budget and slice budget for all processors (ARCHITECTURE §8).
+   */
   readonly processors?: ProcessorRunnerOptions;
 }
 
@@ -256,23 +295,70 @@ export interface KernelOptions {
  * @public
  */
 export interface UnitHandle<C extends ControlInterface = ControlInterface> {
-  /** The unit's full id. */
+  /**
+   * @summary The full id of the unit: `subsystem` or `subsystem/feature`.
+   */
   readonly id: string;
-  /** The unit's lifecycle, observable. */
+  /**
+   * @summary The lifecycle of the unit, as a view.
+   * @description The snapshot holds the `status`, the `reason`, the
+   * dependencies that the unit waits for, and the features that are off.
+   */
   readonly lifecycle: View<LifecycleSnapshot>;
-  /** The control interface while running, otherwise `undefined`. */
+  /**
+   * @summary The control interface of the unit, or `undefined` while it does not run.
+   * @description Read it again after a restart: the unit then has a new control interface.
+   */
   readonly control: C | undefined;
-  /** Starts a `FAILED` (or waiting) unit again. */
+  /**
+   * @summary Starts a `FAILED` unit again, or a unit that waits.
+   * @description The promise resolves after the kernel reconciles the
+   * dependencies. A unit that still has unmet dependencies stays waiting.
+   * @example
+   * A retry button for a failed feature
+   * ```ts
+   * retryButton.onclick = () => kernel.unit('storage/idb').restart();
+   * ```
+   * @returns {Promise<void>} Resolves after the restart.
+   */
   restart(): Promise<void>;
   /**
    * @summary Suspends a running unit, for example when the page is hidden.
+   * @description The kernel calls the `suspend` hook of the unit. The Queue
+   * holds packets for a suspended target and retries them.
+   * @example
+   * Suspending while the page is hidden
+   * ```ts
+   * document.addEventListener('visibilitychange', () => {
+   *   if (document.hidden) void kernel.unit('sync').suspend('Page hidden.');
+   * });
+   * ```
    * @param {string} [reason='Suspended.'] The lifecycle reason.
+   * @returns {Promise<void>} Resolves after the unit is `SUSPENDED`.
    */
   suspend(reason?: string): Promise<void>;
-  /** Resumes a suspended unit. */
+  /**
+   * @summary Resumes a suspended unit.
+   * @description The kernel calls the `resume` hook of the unit. If the hook
+   * throws, the unit goes to `FAILED`.
+   * @example
+   * Resuming when the page is visible again
+   * ```ts
+   * if (!document.hidden) await kernel.unit('sync').resume();
+   * ```
+   * @returns {Promise<void>} Resolves after the unit runs again.
+   */
   resume(): Promise<void>;
   /**
    * @summary Destroys the unit. `DESTROYED` is final.
+   * @description The kernel runs the disposers of the unit and saves its
+   * persisted state. Units that need it are suspended.
+   * @example
+   * Removing a feature that the user turned off
+   * ```ts
+   * await kernel.unit('analytics/heatmap').destroy();
+   * ```
+   * @returns {Promise<void>} Resolves after the unit is `DESTROYED`.
    * @throws {Error} For a centralized subsystem: only the platform destroys those.
    */
   destroy(): Promise<void>;
@@ -366,6 +452,7 @@ export class Kernel {
   #stopping = false;
 
   /**
+   * @summary Creates the kernel and checks the dependency graph. No unit starts until `start`.
    * @param {readonly SubsystemDefinition[]} subsystems Every subsystem of the platform.
    * @param {KernelOptions} [options] Router, persistence, error handling, ids, clock and processor options.
    * @throws {DependencyCycleError} When required dependencies form a cycle.

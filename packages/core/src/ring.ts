@@ -62,24 +62,53 @@ import { deepFreeze, type Schedule, type View } from './view';
  * @public
  */
 export interface RingBuffer<T> {
-  /** The most items kept. */
+  /**
+   * @summary The largest number of items that the buffer keeps.
+   */
   readonly capacity: number;
-  /** Items kept now. */
+  /**
+   * @summary The number of items in the buffer now.
+   */
   readonly size: number;
-  /** Items evicted so far (`clear` does not count). */
+  /**
+   * @summary The number of items that the buffer removed because it was full.
+   * @description `clear` does not change this number.
+   */
   readonly dropped: number;
-  /** Oldest first, read-only and frozen. */
+  /**
+   * @summary The items as a view, oldest first.
+   * @description The snapshot is frozen. The buffer makes a new snapshot only
+   * when it is read after a change.
+   */
   readonly view: View<readonly T[]>;
   /**
-   * @summary Appends an item, freezing it.
+   * @summary Adds an item at the end and freezes it.
+   * @description When the buffer is full, it removes the oldest item and returns it.
+   * @example
+   * Keeping the last 100 events
+   * ```ts
+   * const evicted = ring.push(event);
+   * ```
    * @param {T} item The item.
-   * @returns {T | undefined} The evicted item, when the buffer was full.
+   * @returns {T | undefined} The removed item, when the buffer was full.
    */
   push(item: T): T | undefined;
-  /** Removes every item. */
+  /**
+   * @summary Removes all items.
+   * @example
+   * Clearing a log
+   * ```ts
+   * ring.clear();
+   * ```
+   */
   clear(): void;
   /**
    * @summary Copies the items, oldest first.
+   * @example
+   * Searching the items
+   * ```ts
+   * ring.toArray().filter((entry) => entry.level === 'ERROR');
+   * ```
    * @returns {T[]} A new array.
    */
   toArray(): T[];

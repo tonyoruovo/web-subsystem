@@ -68,6 +68,12 @@ import { createScheduler } from './scheduler';
  * @public
  */
 export type WorkerScopeLike = PortLike & {
+  /**
+   * @summary Listens to the connections of a shared worker.
+   * @description Each `connect` event carries the port of one new client in `event.ports[0]`.
+   * @param {'connect'} type The event type.
+   * @param {(event: MessageEvent) => void} listener Called for each connection.
+   */
   addEventListener(type: 'connect', listener: (event: MessageEvent) => void): void;
 };
 

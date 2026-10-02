@@ -98,16 +98,26 @@ export type FailoverTrigger =
  * @public
  */
 export class HostFailureError extends Error {
+  /**
+   * @summary The name of the error class: `'HostFailureError'`.
+   */
   override readonly name = 'HostFailureError';
 
   /**
+   * @summary Creates the error for one host failure.
    * @param {HostKind} host The host that failed.
-   * @param {FailoverTrigger} trigger Why.
-   * @param {string} message Details.
+   * @param {FailoverTrigger} trigger The cause of the failure.
+   * @param {string} message The details.
    * @param {object} [options] `cause`: the underlying error.
    */
   constructor(
+    /**
+     * @summary The kind of host that failed.
+     */
     readonly host: HostKind,
+    /**
+     * @summary The failover trigger: what made the host fail (ARCHITECTURE §8.3).
+     */
     readonly trigger: FailoverTrigger,
     message: string,
     options?: { cause?: unknown },
@@ -154,24 +164,68 @@ export class HostFailureError extends Error {
  * @public
  */
 export interface Host<In = unknown, Out = unknown> {
-  /** Where this host runs the processor. */
+  /**
+   * @summary The kind of host: where it runs the processor.
+   */
   readonly kind: HostKind;
   /**
-   * @summary Brings the host up.
+   * @summary Starts the host.
+   * @description A worker host makes its worker and waits for the handshake.
+   * The virtual host loads the module and calls `setup`.
+   * @example
+   * Starting a host before the first call
+   * ```ts
+   * await host.start();
+   * ```
+   * @returns {Promise<void>} Resolves when the host can take calls.
    * @throws {HostFailureError} When the host cannot start.
    */
   start(): Promise<void>;
   /**
    * @summary Runs one message on the processor.
+   * @example
+   * Running a job
+   * ```ts
+   * const total = await host.call({ items: [1, 2, 3] });
+   * ```
    * @param {In} message The message.
-   * @returns {Promise<Out>} The processor's result.
+   * @returns {Promise<Out>} The result of the processor.
+   * @throws {HostFailureError} When the host fails during the call.
    */
   call(message: In): Promise<Out>;
-  /** One-way messages from the processor. Returns the unsubscribe function. */
+  /**
+   * @summary Listens to the one-way messages of the processor.
+   * @example
+   * Showing progress
+   * ```ts
+   * const stop = host.onPost((message) => render(message));
+   * ```
+   * @param {(message: unknown) => void} listener Called with each message.
+   * @returns {() => void} Stops the listener.
+   */
   onPost(listener: (message: unknown) => void): () => void;
-  /** Fired once if the host fails after starting. Returns the unsubscribe function. */
+  /**
+   * @summary Listens to a failure of the host after it started.
+   * @description The host calls the listener one time at most. The runner uses it to fail over.
+   * @example
+   * Failing over
+   * ```ts
+   * host.onFailure((error) => void failover(error.trigger));
+   * ```
+   * @param {(error: HostFailureError) => void} listener Called with the failure.
+   * @returns {() => void} Stops the listener.
+   */
   onFailure(listener: (error: HostFailureError) => void): () => void;
-  /** Shuts the host down. */
+  /**
+   * @summary Stops the host.
+   * @description A worker host ends its worker. The virtual host calls `teardown`.
+   * @example
+   * Stopping at teardown
+   * ```ts
+   * await host.stop();
+   * ```
+   * @returns {Promise<void>} Resolves when the host stopped.
+   */
   stop(): Promise<void>;
 }
 
@@ -219,12 +273,16 @@ function listeners<T>() {
  * @public
  */
 export class VirtualHost<In, Out> implements Host<In, Out> {
+  /**
+   * @summary The kind of host: always `'virtual'` (the main thread).
+   */
   readonly kind = 'virtual';
   readonly #posts = listeners<unknown>();
   readonly #scope;
   #module: ProcessorModule<In, Out> | null = null;
 
   /**
+   * @summary Creates a host for one module. The module loads in `start`.
    * @param {() => Promise<ProcessorModule<In, Out>>} load Loads the processor module.
    * @param {Scheduler} scheduler Runs each message as a task, and yields.
    * @param {number} sliceBudgetMs The slice budget (ARCHITECTURE §8.6).
@@ -310,11 +368,20 @@ export class VirtualHost<In, Out> implements Host<In, Out> {
  * @public
  */
 export interface WorkerHostOptions {
-  /** The processor's id, sent in the handshake. */
+  /**
+   * @summary The id of the processor.
+   * @description The host sends it in the handshake, so the worker can load the right module.
+   */
   readonly processorId: string;
-  /** How long the worker may take to answer the handshake. Default 5000 ms. */
+  /**
+   * @summary The longest time for the worker to answer the handshake, in milliseconds.
+   * @description The default is 5000.
+   */
   readonly handshakeTimeoutMs?: number;
-  /** Heartbeat settings. Default: on for shared hosts, off for dedicated hosts. */
+  /**
+   * @summary The heartbeat of the worker, or `false` for none.
+   * @description By default, shared hosts have a heartbeat and dedicated hosts do not.
+   */
   readonly heartbeat?: HeartbeatOptions | false;
 }
 
@@ -358,11 +425,15 @@ export class WorkerHost<In, Out> implements Host<In, Out> {
   #onFailureDuringStart: ((error: HostFailureError) => void) | null = null;
 
   /**
+   * @summary Creates a host for one worker. The worker starts in `start`.
    * @param {'dedicated' | 'shared'} kind The worker kind.
-   * @param {() => Worker | SharedWorker} factory Creates the worker.
+   * @param {() => Worker | SharedWorker} factory Makes the worker.
    * @param {WorkerHostOptions} options The processor id, handshake timeout and heartbeat.
    */
   constructor(
+    /**
+     * @summary The kind of host: `'dedicated'` or `'shared'`.
+     */
     readonly kind: 'dedicated' | 'shared',
     private readonly factory: () => Worker | SharedWorker,
     private readonly options: WorkerHostOptions,

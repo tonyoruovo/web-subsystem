@@ -70,13 +70,48 @@ export type TaskPriority = 'user-blocking' | 'user-visible' | 'background';
  * @see {@linkcode createScheduler}
  */
 export interface Scheduler {
-  /** Which primitive `postTask` uses. */
+  /**
+   * @summary The browser feature that `postTask` uses.
+   * @description `postTask` is the Prioritized Task Scheduling API.
+   * `message-channel` and `timeout` are fallbacks for browsers without it.
+   */
   readonly kind: 'postTask' | 'message-channel' | 'timeout';
-  /** Runs `task` in a new task and resolves with its result. */
+  /**
+   * @summary Runs `task` in a new task and resolves with its result.
+   * @description Only the `postTask` kind uses `priority`. The fallbacks run tasks in order.
+   * @example
+   * Running work after the current task
+   * ```ts
+   * const result = await scheduler.postTask(() => compute(), 'background');
+   * ```
+   * @template T The result type.
+   * @param {() => T | Promise<T>} task The work.
+   * @param {TaskPriority} [priority] The priority of the task.
+   * @returns {Promise<T>} The result of `task`.
+   */
   postTask<T>(task: () => T | Promise<T>, priority?: TaskPriority): Promise<T>;
-  /** Gives the thread back to the browser, then resolves. */
+  /**
+   * @summary Gives the thread back to the browser, then resolves.
+   * @example
+   * Yielding during long work
+   * ```ts
+   * await scheduler.yield();
+   * ```
+   * @returns {Promise<void>} Resolves in a later task.
+   */
   yield(): Promise<void>;
-  /** Runs `task` when the browser is idle. */
+  /**
+   * @summary Runs `task` when the browser is idle.
+   * @description Without `requestIdleCallback`, the task runs in a later task.
+   * @example
+   * Cleaning a cache at idle time
+   * ```ts
+   * void scheduler.idle(() => cache.prune());
+   * ```
+   * @template T The result type.
+   * @param {() => T | Promise<T>} task The work.
+   * @returns {Promise<T>} The result of `task`.
+   */
   idle<T>(task: () => T | Promise<T>): Promise<T>;
 }
 
@@ -104,16 +139,35 @@ export interface Scheduler {
  * @public
  */
 export interface SchedulerEnvironment {
-  /** The Prioritized Task Scheduling API, where available. */
+  /**
+   * @summary The Prioritized Task Scheduling API, where the browser has it.
+   */
   readonly scheduler?: {
+    /**
+     * @summary Runs a task with a priority.
+     * @template T The result type.
+     * @param {() => T} task The work.
+     * @param {object} [options] The `priority` of the task.
+     * @returns {Promise<T>} The result of `task`.
+     */
     postTask?<T>(task: () => T, options?: { priority?: TaskPriority }): Promise<T>;
+    /**
+     * @summary Gives the thread back to the browser.
+     * @returns {Promise<void>} Resolves in a later task.
+     */
     yield?(): Promise<void>;
   };
-  /** Used for the macrotask fallback. */
+  /**
+   * @summary The `MessageChannel` constructor, for the first fallback.
+   */
   readonly MessageChannel?: typeof MessageChannel;
-  /** Used for idle work, where available. */
+  /**
+   * @summary Runs a callback when the browser is idle, where the browser has it.
+   */
   readonly requestIdleCallback?: (callback: () => void) => unknown;
-  /** The last-resort fallback. */
+  /**
+   * @summary Runs a callback after a delay. The last fallback.
+   */
   readonly setTimeout: (callback: () => void, ms?: number) => unknown;
 }
 

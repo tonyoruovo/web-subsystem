@@ -90,9 +90,16 @@ export interface StatePersistence {
     unitId: string,
   ): PersistedState<object> | undefined | Promise<PersistedState<object> | undefined>;
   /**
-   * @summary Saves a unit's persisted state.
-   * @param {string} unitId The unit's full id.
+   * @summary Saves the persisted state of a unit.
+   * @description The kernel calls it when it tears the unit down.
+   * @example
+   * Saving to Web Storage
+   * ```ts
+   * save: (unitId, state) => localStorage.setItem(`state:${unitId}`, JSON.stringify(state)),
+   * ```
+   * @param {string} unitId The full id of the unit.
    * @param {PersistedState<object>} state The persisted keys and their schema version.
+   * @returns {void | Promise<void>} Resolves when the state is saved.
    */
   save(unitId: string, state: PersistedState<object>): void | Promise<void>;
 }

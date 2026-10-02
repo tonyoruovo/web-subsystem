@@ -65,11 +65,30 @@ import type { FingerprintTrail } from './packet';
  * @public
  */
 export interface PendingCallbacks<R = unknown> {
-  /** Called with the reply. */
+  /**
+   * @summary Receives the reply of a request.
+   * @example
+   * Resolving a promise
+   * ```ts
+   * registry.register(id, { onComplete: resolve, onError: reject });
+   * ```
+   * @param {R} result The reply.
+   */
   onComplete(result: R): void;
-  /** Called with the failure. */
+  /**
+   * @summary Receives the failure of a request.
+   * @description The registry calls it for a remote error, a timeout, or when it closes.
+   * @example
+   * Logging the failure
+   * ```ts
+   * onError: (error) => console.warn('Request failed:', error.message),
+   * ```
+   * @param {Error} error The failure.
+   */
   onError(error: Error): void;
-  /** Receives the final fingerprint trail, on completion and on error. */
+  /**
+   * @summary Receives the final fingerprint trail, after completion and after an error.
+   */
   onLog?: (trail: FingerprintTrail) => void;
 }
 
@@ -109,6 +128,7 @@ export class CorrelationRegistry {
   readonly #pending = new Map<string, PendingCallbacks<never>>();
 
   /**
+   * @summary Creates an empty registry.
    * @param {(error: unknown, id: string) => void} [onUnhandled] Receives errors thrown by callbacks.
    * Defaults to rethrowing them asynchronously.
    */

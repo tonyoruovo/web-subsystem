@@ -93,21 +93,45 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
  * @see {@linkcode makeFingerprint}
  */
 export interface Fingerprint {
-  /** What happened, for example `sent`, `delivered`, `handled`. */
+  /**
+   * @summary The name of the action, for example `sent`, `delivered` or `failed`.
+   * @description The platform uses a small set of names: `sent`, `enqueued`,
+   * `dispatched`, `delivered`, `completed`, `failed`, `retry-scheduled`,
+   * `dead-lettered`, `rejected`, `fanned-out` and `relayed`. Subsystems can add their own.
+   */
   readonly actionName: string;
-  /** JS type of the value involved. */
+  /**
+   * @summary The JavaScript type of the value that the action used.
+   * @description The value is the result of `typeof`, or `'undefined'` when no value applies.
+   */
   readonly valueType: string;
-  /** Unix milliseconds. */
+  /**
+   * @summary The time of the action, in Unix milliseconds.
+   */
   readonly timestamp: number;
-  /** The subsystem that acted. */
+  /**
+   * @summary The id of the subsystem that did the action.
+   */
   readonly subsystemId: string;
-  /** The feature, worker or state key involved, or `null`. */
+  /**
+   * @summary The feature, worker or state key that did the action, or `null`.
+   * @description For example, `idb` when the `storage/idb` feature sends a packet.
+   */
   readonly componentId: string | null;
-  /** How many times the same action repeated, or `null`. */
+  /**
+   * @summary The number of times that the same action occurred, or `null`.
+   * @description The Queue sets it on `retry-scheduled` to show the attempt number.
+   */
   readonly counter: number | null;
-  /** How serious the action was. */
+  /**
+   * @summary The severity of the action.
+   * @description `WARN` and higher show a problem. The Logger uses the level to filter.
+   */
   readonly level: LogLevel;
-  /** Free text, or `null`. */
+  /**
+   * @summary Free text about the action, or `null`.
+   * @description Failures put the error message here.
+   */
   readonly message: string | null;
 }
 
@@ -135,9 +159,16 @@ export interface Fingerprint {
  * @see {@linkcode appendFingerprint}
  */
 export interface FingerprintTrail {
-  /** The first `head` entries, then the last `tail` entries, in order. */
+  /**
+   * @summary The kept fingerprints, oldest first.
+   * @description The list holds the first `head` entries and the last `tail`
+   * entries of the trail. The entries between the two parts are removed.
+   */
   readonly entries: readonly Fingerprint[];
-  /** How many entries between the head and the tail were dropped. */
+  /**
+   * @summary The number of entries removed between the head and the tail.
+   * @description A value of `0` means that the trail is complete.
+   */
   readonly dropped: number;
 }
 
@@ -153,9 +184,15 @@ export interface FingerprintTrail {
  * @public
  */
 export interface TrailLimits {
-  /** Entries kept from the start. */
+  /**
+   * @summary The number of entries to keep from the start of the trail.
+   * @description These entries show where the packet came from. The default is 16.
+   */
   readonly head: number;
-  /** Entries kept from the end. */
+  /**
+   * @summary The number of entries to keep from the end of the trail.
+   * @description These entries show the last steps and the result. The default is 48.
+   */
   readonly tail: number;
 }
 
@@ -294,29 +331,64 @@ export function makeFingerprint(
  * @public
  */
 export interface PacketMetadata {
-  /** Unique id of this packet. */
+  /**
+   * @summary The unique id of this packet.
+   * @description Receivers use it to drop a packet that arrives two times.
+   */
   readonly messageId: string;
-  /** The sending subsystem. */
+  /**
+   * @summary The id of the subsystem that sent the packet.
+   * @description A feature sends with the id of its parent subsystem.
+   */
   readonly source: string;
-  /** The target subsystem, or `null` for a broadcast. */
+  /**
+   * @summary The id of the target subsystem, or `null` for a broadcast.
+   */
   readonly target: string | null;
-  /** The packet's scope: for a broadcast, how far it reaches (ARCHITECTURE §11.2). */
+  /**
+   * @summary The scope of the packet.
+   * @description For a broadcast, the scope sets how far the packet goes
+   * (ARCHITECTURE §11.2). A broadcast always has the scope of its sender.
+   */
   readonly scope: Scope;
-  /** Unix milliseconds when the packet was created. */
+  /**
+   * @summary The time when the sender made the packet, in Unix milliseconds.
+   */
   readonly timestamp: number;
-  /** Time to live in milliseconds. */
+  /**
+   * @summary The time to live, in milliseconds.
+   * @description When `timestamp + ttl` is in the past, the kernel and the
+   * Queue do not deliver the packet. Without a value, the packet does not expire.
+   */
   readonly ttl?: number;
-  /** Links a reply to its request. */
+  /**
+   * @summary The id that links a reply to its request.
+   */
   readonly correlationId?: string;
-  /** Shared by every packet of one causal chain, across tabs and devices (ARCHITECTURE §9.4). */
+  /**
+   * @summary The id of the trace: one value for all packets of one causal chain.
+   * @description The value stays the same across tabs and devices, so the
+   * Logger can join the trails of one chain (ARCHITECTURE §9.4).
+   */
   readonly traceId: string;
-  /** This packet's span in the trace. */
+  /**
+   * @summary The id of this packet's span in the trace.
+   */
   readonly spanId: string;
-  /** The span that caused this packet. */
+  /**
+   * @summary The id of the span that caused this packet.
+   * @description It is absent on the first packet of a trace.
+   */
   readonly parentSpanId?: string;
-  /** Orders packets that share this key. */
+  /**
+   * @summary A key that keeps related packets in order.
+   * @description The Queue delivers packets with the same key one at a time, in the order that they arrived.
+   */
   readonly orderingKey?: string;
-  /** Elevation token. Never attached to broadcasts. */
+  /**
+   * @summary An elevation token for a protected request.
+   * @description The wire protocol refuses a broadcast that has a token.
+   */
   readonly authToken?: string;
 }
 
@@ -352,17 +424,33 @@ export interface PacketMetadata {
  * @public
  */
 export interface PacketEnvelope<P = unknown> {
-  /** Stable id of the event, for example `storage:put`. */
+  /**
+   * @summary The stable id of the event, for example `storage:put`.
+   * @description Subscribers list event ids in `subscribes`. Access control in
+   * the NotificationCenter also uses the event id.
+   */
   readonly eventId: string;
-  /** Human-readable action name for logs. Defaults to the event id. */
+  /**
+   * @summary A name of the action for logs.
+   * @description The default is the event id.
+   */
   readonly actionName: string;
-  /** The payload. Must be structured-cloneable. */
+  /**
+   * @summary The data of the packet.
+   * @description The value must be structured-cloneable. Global packets must also be JSON values.
+   */
   readonly payload: P;
-  /** Scheduling priority. */
+  /**
+   * @summary The scheduling priority of the packet.
+   */
   readonly importance: Importance;
-  /** Routing and tracing metadata. */
+  /**
+   * @summary The routing and tracing data of the packet.
+   */
   readonly metadata: PacketMetadata;
-  /** The bounded history of the packet. */
+  /**
+   * @summary The bounded history of the packet.
+   */
   readonly fingerprints: FingerprintTrail;
 }
 
@@ -413,23 +501,50 @@ export type PacketHeader = Omit<PacketEnvelope, 'payload'>;
  * @public
  */
 export interface OutgoingPacket<P = unknown> {
-  /** Stable id of the event. */
+  /**
+   * @summary The stable id of the event, for example `storage:put`.
+   */
   readonly eventId: string;
-  /** The payload. Must be structured-cloneable. */
+  /**
+   * @summary The data of the packet.
+   * @description The value must be structured-cloneable.
+   */
   readonly payload: P;
-  /** Defaults to `eventId`. */
+  /**
+   * @summary A name of the action for logs.
+   * @description The default is `eventId`.
+   */
   readonly actionName?: string;
-  /** Defaults to `MEDIUM`. */
+  /**
+   * @summary The scheduling priority.
+   * @description The default is `MEDIUM`. Use `CRITICAL` only for packets that
+   * must pass while the platform is `BUSY`.
+   */
   readonly importance?: Importance;
-  /** The target subsystem. Omit for a broadcast. */
+  /**
+   * @summary The id of the target subsystem.
+   * @description Leave it out to send a broadcast.
+   */
   readonly target?: string;
-  /** Time to live in milliseconds. */
+  /**
+   * @summary The time to live, in milliseconds.
+   * @description The packet is not delivered after this time.
+   */
   readonly ttl?: number;
-  /** Orders packets that share this key. */
+  /**
+   * @summary A key that keeps related packets in order.
+   */
   readonly orderingKey?: string;
-  /** Elevation token for a protected request. Not allowed on broadcasts. */
+  /**
+   * @summary An elevation token for a protected request.
+   * @description Do not set it on a broadcast.
+   */
   readonly authToken?: string;
-  /** The packet this one was caused by: continues its trace. */
+  /**
+   * @summary The header of the packet that caused this one.
+   * @description The new packet continues the trace of that packet: it gets the
+   * same `traceId`, and its `parentSpanId` is the `spanId` of that packet.
+   */
   readonly causedBy?: PacketHeader;
 }
 
@@ -542,10 +657,14 @@ export function createEnvelope<P>(
  * @public
  */
 export class PayloadConsumedError extends Error {
+  /**
+   * @summary The name of the error class: `'PayloadConsumedError'`.
+   */
   override readonly name = 'PayloadConsumedError';
 
   /**
-   * @param {string} messageId The packet's id.
+   * @summary Creates the error for one packet.
+   * @param {string} messageId The id of the packet.
    */
   constructor(messageId: string) {
     super(
@@ -601,8 +720,9 @@ export class Packet<P = unknown> {
   #consumed = false;
 
   /**
+   * @summary Wraps an envelope.
    * @param {PacketEnvelope<P>} envelope The envelope to wrap.
-   * @param {object} [options] `clone: true` makes `take()` return a structured clone.
+   * @param {object} [options] Set `clone: true` to make `take()` return a structured clone.
    */
   constructor(envelope: PacketEnvelope<P>, options: { readonly clone?: boolean } = {}) {
     const { payload, ...header } = envelope;
@@ -612,25 +732,52 @@ export class Packet<P = unknown> {
   }
 
   /**
-   * @summary Everything except the payload.
-   * @returns {PacketHeader} The header, including the current fingerprint trail.
+   * @summary All parts of the envelope except the payload.
+   * @description The header includes the current fingerprint trail, so it
+   * changes after each `stamp`. Reading the header does not count as a read of
+   * the payload.
+   * @example
+   * Continuing the trace of the packet in hand
+   * ```ts
+   * await ctx.port.send({ eventId: 'audit:read', payload: null, causedBy: packet.header });
+   * ```
+   * @returns {PacketHeader} The header.
    */
   get header(): PacketHeader {
     return this.#header;
   }
 
   /**
-   * @summary Tells whether the payload was already taken or forwarded.
-   * @returns {boolean} `true` once read.
+   * @summary Tells if the payload was read, with `take` or `forward`.
+   * @example
+   * Reading the payload only when nobody did
+   * ```ts
+   * if (!packet.consumed) use(packet.take());
+   * ```
+   * @returns {boolean} `true` after the read.
    */
   get consumed(): boolean {
     return this.#consumed;
   }
 
   /**
-   * @summary Returns the payload. Allowed once.
-   * @returns {P} The payload, or a clone of it when the packet was created with `clone: true`.
-   * @throws {PayloadConsumedError} On a second read.
+   * @summary Returns the payload. You can read it one time only.
+   * @description When the packet was made with `clone: true`, each call
+   * returns a structured clone, so a subscriber cannot change the payload of
+   * another subscriber.
+   * @example
+   * Example 1: Reading a request
+   * ```ts
+   * const { key } = packet.take() as { key: string };
+   * ```
+   * @example
+   * Example 2: A second read throws
+   * ```ts
+   * packet.take();
+   * packet.take(); // PayloadConsumedError
+   * ```
+   * @returns {P} The payload, or a clone of it.
+   * @throws {PayloadConsumedError} When the payload was already read.
    */
   take(): P {
     this.#consume();
@@ -638,9 +785,16 @@ export class Packet<P = unknown> {
   }
 
   /**
-   * @summary Appends a fingerprint to this packet's trail.
-   * @param {Fingerprint} fingerprint The entry.
-   * @param {TrailLimits} [limits] Trail limits. Defaults to {@linkcode DEFAULT_TRAIL_LIMITS}.
+   * @summary Adds a fingerprint to the trail of this packet.
+   * @description The trail keeps its head and its tail (see {@linkcode appendFingerprint}).
+   * Stamping does not read the payload.
+   * @example
+   * Recording a step in a receiver
+   * ```ts
+   * packet.stamp(makeFingerprint('storage', 'written', { componentId: 'idb' }));
+   * ```
+   * @param {Fingerprint} fingerprint The new entry.
+   * @param {TrailLimits} [limits] The trail limits. The default is {@linkcode DEFAULT_TRAIL_LIMITS}.
    */
   stamp(fingerprint: Fingerprint, limits?: TrailLimits): void {
     this.#header = {
@@ -650,9 +804,17 @@ export class Packet<P = unknown> {
   }
 
   /**
-   * @summary Hands the whole envelope on, to a transport or the next hop. Counts as the read.
+   * @summary Returns the full envelope, to send it to a transport or to the next hop.
+   * @description Forwarding counts as the read of the payload. After it,
+   * `take` and `forward` throw.
+   * @example
+   * A router that passes the packet on
+   * ```ts
+   * packet.stamp(makeFingerprint('queue', 'dispatched'));
+   * await transport.request(packet.forward());
+   * ```
    * @returns {PacketEnvelope<P>} The envelope, with the current trail.
-   * @throws {PayloadConsumedError} When the payload was already taken.
+   * @throws {PayloadConsumedError} When the payload was already read.
    */
   forward(): PacketEnvelope<P> {
     this.#consume();

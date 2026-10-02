@@ -72,12 +72,25 @@ import { createStore, type View } from './view';
  * @public
  */
 export interface ProcessorStatus {
-  /** The running host, or `null` before start and after stop. */
+  /**
+   * @summary The host that runs the processor now, or `null` before start and after stop.
+   */
   readonly host: HostKind | null;
-  /** Every host given up, in order. */
+  /**
+   * @summary Each host that the runner gave up, oldest first.
+   */
   readonly failovers: readonly {
+    /**
+     * @summary The host that the runner gave up.
+     */
     readonly host: HostKind;
+    /**
+     * @summary The failover trigger: why the host was given up.
+     */
     readonly trigger: FailoverTrigger;
+    /**
+     * @summary The details of the failure.
+     */
     readonly message: string;
   }[];
 }
@@ -110,13 +123,40 @@ export interface ProcessorStatus {
  * @public
  */
 export interface ProcessorHandle<In = unknown, Out = unknown> {
-  /** The processor's id. */
+  /**
+   * @summary The id of the processor.
+   */
   readonly id: string;
-  /** The current host and the failovers so far. */
+  /**
+   * @summary The current host and the failovers until now, as a view.
+   */
   readonly status: View<ProcessorStatus>;
-  /** Runs one message on the current host. Re-run on the next host if the current one fails. */
+  /**
+   * @summary Runs one message on the current host.
+   * @description When the current host fails during the call, the runner
+   * fails over and runs the message again on the next host. A job must
+   * therefore be safe to run more than one time.
+   * @example
+   * Running a job
+   * ```ts
+   * const total = await ctx.processor<{ items: number[] }, number>('sum').call({ items });
+   * ```
+   * @param {In} message The message.
+   * @returns {Promise<Out>} The result of the processor.
+   * @throws {ProcessorStartError} When no host can run the processor.
+   */
   call(message: In): Promise<Out>;
-  /** One-way messages from the processor. Returns the unsubscribe function. */
+  /**
+   * @summary Listens to the one-way messages of the processor.
+   * @description The listener stays attached after a failover.
+   * @example
+   * Showing progress
+   * ```ts
+   * const stop = ctx.processor('import').onPost((message) => render(message));
+   * ```
+   * @param {(message: unknown) => void} listener Called with each message.
+   * @returns {() => void} Stops the listener.
+   */
   onPost(listener: (message: unknown) => void): () => void;
 }
 
@@ -146,13 +186,25 @@ export interface ProcessorHandle<In = unknown, Out = unknown> {
  * @public
  */
 export interface ProcessorRunnerOptions {
-  /** Runs virtual hosts' tasks. */
+  /**
+   * @summary Runs the tasks of virtual hosts.
+   * @description The default is a scheduler from {@linkcode createScheduler}.
+   */
   readonly scheduler?: Scheduler;
-  /** Limits physical workers. */
+  /**
+   * @summary Limits the number of physical workers.
+   * @description The default budget has one worker fewer than the device has cores.
+   */
   readonly budget?: WorkerBudget;
-  /** Slice budget for virtual hosts (ARCHITECTURE §8.6). Default 5 ms. */
+  /**
+   * @summary The slice budget of virtual hosts, in milliseconds (ARCHITECTURE §8.6).
+   * @description The default is 5.
+   */
   readonly sliceBudgetMs?: number;
-  /** Replaces host creation, for tests. */
+  /**
+   * @summary Replaces the function that makes hosts.
+   * @description Tests use it to give fake hosts.
+   */
   readonly createHost?: typeof createHost;
 }
 
@@ -180,6 +232,9 @@ export interface ProcessorRunnerOptions {
  * @public
  */
 export class ProcessorStartError extends Error {
+  /**
+   * @summary The name of the error class: `'ProcessorStartError'`.
+   */
   override readonly name = 'ProcessorStartError';
 }
 
@@ -228,11 +283,15 @@ export class ProcessorRunner<In = unknown, Out = unknown> implements ProcessorHa
   #switching: Promise<void> | null = null;
 
   /**
+   * @summary Creates a runner for one processor. No host starts until `start`.
    * @param {ProcessorDef<In, Out>} def The processor definition.
    * @param {ProcessorRunnerOptions} [options] Scheduler, budget, slice budget and host factory.
    * @throws {Error} When the definition is invalid (see `validateProcessorDef`).
    */
   constructor(
+    /**
+     * @summary The definition of the processor.
+     */
     readonly def: ProcessorDef<In, Out>,
     private readonly options: ProcessorRunnerOptions = {},
   ) {

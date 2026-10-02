@@ -173,17 +173,48 @@ export function createMemoryRouteSource(initial = '/'): MemoryRouteSource {
  * @public
  */
 export interface RouteWindow {
-  /** The current location. */
-  readonly location: { readonly pathname: string };
-  /** The history methods that change the path. */
+  /**
+   * @summary The current location of the page.
+   */
+  readonly location: {
+    /**
+     * @summary The path of the current URL, for example `/settings`.
+     */
+    readonly pathname: string;
+  };
+  /**
+   * @summary The history methods that change the path.
+   * @description The route source wraps them when the Navigation API is not available.
+   */
   readonly history: Pick<History, 'pushState' | 'replaceState'>;
-  /** Registers the `popstate` listener. */
+  /**
+   * @summary Adds the `popstate` listener.
+   * @param {'popstate'} type The event type.
+   * @param {() => void} listener Called after the user goes back or forward.
+   */
   addEventListener(type: 'popstate', listener: () => void): void;
-  /** Removes the `popstate` listener. */
+  /**
+   * @summary Removes the `popstate` listener.
+   * @param {'popstate'} type The event type.
+   * @param {() => void} listener The listener to remove.
+   */
   removeEventListener(type: 'popstate', listener: () => void): void;
-  /** The Navigation API, where the browser has it. */
+  /**
+   * @summary The Navigation API, where the browser has it.
+   * @description When it is present, the route source uses it instead of the History API.
+   */
   readonly navigation?: {
+    /**
+     * @summary Adds the `navigatesuccess` listener.
+     * @param {'navigatesuccess'} type The event type.
+     * @param {() => void} listener Called after each navigation completes.
+     */
     addEventListener(type: 'navigatesuccess', listener: () => void): void;
+    /**
+     * @summary Removes the `navigatesuccess` listener.
+     * @param {'navigatesuccess'} type The event type.
+     * @param {() => void} listener The listener to remove.
+     */
     removeEventListener(type: 'navigatesuccess', listener: () => void): void;
   };
 }

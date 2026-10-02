@@ -118,10 +118,17 @@ export type Disposer = () => void | Promise<void>;
  * @see {@linkcode NO_CONTROL}
  */
 export interface ControlInterface {
-  /** Commands the unit performs on itself. */
+  /**
+   * @summary The commands that the unit does on itself, by name.
+   * @description A command validates its arguments and changes the state of
+   * its own unit (amendment A9). Other units never get a mutable reference to that state.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly commands: Readonly<Record<string, (...args: any[]) => unknown>>;
-  /** Read-only views of the unit's state. */
+  /**
+   * @summary The read-only views of the unit's state, by name.
+   * @description Most units give `state`, which is `ctx.state.readable`. Framework bindings use these views.
+   */
   readonly views: Readonly<Record<string, View<unknown>>>;
 }
 
@@ -158,18 +165,33 @@ export interface ControlInterface {
  */
 export interface PacketPort {
   /**
-   * @summary Sends a broadcast (no `target`) or a fire-and-forget packet.
+   * @summary Sends a broadcast (no `target`) or a packet that needs no reply.
+   * @description The promise resolves after the router delivered the packet.
+   * It rejects when the Queue refuses the packet or the delivery fails.
+   * @example
+   * Announcing a change
+   * ```ts
+   * await ctx.port.send({ eventId: 'settings:changed', payload: { theme: 'dark' } });
+   * ```
    * @template P The payload type.
    * @param {OutgoingPacket<P>} packet The packet.
-   * @returns {Promise<void>} Resolves once the packet was routed.
+   * @returns {Promise<void>} Resolves after the delivery.
+   * @throws {ScopeViolationError} When a broadcast does not have the scope of its sender.
    */
   send<P>(packet: OutgoingPacket<P>): Promise<void>;
   /**
    * @summary Sends a 1-to-1 request and resolves with the reply.
+   * @description The reply is the value that the `receive` handler of the target returns.
+   * @example
+   * Asking another subsystem for data
+   * ```ts
+   * const user = await ctx.port.request<{ id: string }>({ eventId: 'auth:whoami', payload: null, target: 'auth' });
+   * ```
    * @template R The reply type.
    * @template P The payload type.
    * @param {OutgoingPacket<P>} packet The packet, with its `target`.
-   * @returns {Promise<R>} The target's reply.
+   * @returns {Promise<R>} The reply of the target.
+   * @throws {UnitUnavailableError} When the target cannot receive the packet.
    */
   request<R = unknown, P = unknown>(
     packet: OutgoingPacket<P> & { readonly target: string },
@@ -216,16 +238,36 @@ export interface PacketPort {
  * @public
  */
 export interface UnitContext<S> {
-  /** The full id: `subsystem` or `subsystem/feature`. */
+  /**
+   * @summary The full id of the unit: `subsystem` or `subsystem/feature`.
+   */
   readonly id: string;
-  /** The unit's own state. Only this unit can update it. */
+  /**
+   * @summary The state of the unit.
+   * @description Only this unit can change it, with `ctx.state.update`. Give
+   * `ctx.state.readable` to other units through a view.
+   */
   readonly state: StateCell<S>;
-  /** Aborted when the unit is torn down: destroyed, failed, or its parent stopped. */
+  /**
+   * @summary A signal that aborts when the kernel tears the unit down.
+   * @description Teardown occurs when the unit is destroyed or fails, or when
+   * its parent stops. Pass the signal to `fetch` and timers to stop their work.
+   */
   readonly signal: AbortSignal;
-  /** The packet port. Features share their parent's. */
+  /**
+   * @summary The packet port of the unit.
+   * @description A feature uses the port of its parent subsystem.
+   */
   readonly port: PacketPort;
   /**
    * @summary Returns the control interface of a declared dependency.
+   * @description The value is `undefined` while the dependency does not run.
+   * Read it again each time: the dependency gets a new control interface when it restarts.
+   * @example
+   * Writing through Storage when it runs
+   * ```ts
+   * await ctx.dependency<StorageControl>('storage')?.commands.put('theme', 'dark');
+   * ```
    * @template C The dependency's control interface type.
    * @param {string} target A target listed in this unit's `requires`.
    * @returns {C | undefined} The control interface, or `undefined` while the dependency is not running.
@@ -240,6 +282,14 @@ export interface UnitContext<S> {
    * it starts, stops, or restarts with a new control interface. Stops by
    * itself when the unit is torn down. An error thrown by `listener` is
    * reported, not propagated.
+   * @example
+   * Binding a sink when Storage starts
+   * ```ts
+   * ctx.watch<StorageControl>('storage', (storage) => {
+   *   if (storage) void sink.bind((entry) => storage.commands.append('logs', entry));
+   *   else sink.unbind();
+   * });
+   * ```
    * @template C The dependency's control interface type.
    * @param {string} target A target listed in this unit's `requires`.
    * @param {(control: C | undefined) => void} listener Called with each new control interface, or `undefined`.
@@ -252,13 +302,25 @@ export interface UnitContext<S> {
   ): () => void;
   /**
    * @summary Reports an error the unit recovered from.
-   * @description Goes to the kernel's `onError` with this unit's id. The
-   * unit's lifecycle does not change; use `fail` for errors it cannot recover from.
+   * @description The error goes to the `onError` option of the kernel, with
+   * the id of this unit. The lifecycle of the unit does not change. Use `fail`
+   * for an error that the unit cannot recover from.
+   * @example
+   * Reporting a failed write that the unit retries later
+   * ```ts
+   * sink.write(entry).catch((error) => ctx.report(error));
+   * ```
    * @param {unknown} error What went wrong.
    */
   report(error: unknown): void;
   /**
-   * @summary Returns a sibling feature's control interface (ARCHITECTURE §3.1).
+   * @summary Returns the control interface of a sibling feature (ARCHITECTURE §3.1).
+   * @description Only a feature has siblings: the other features of its parent.
+   * @example
+   * The `sync` feature reads the queue of its `outbox` sibling
+   * ```ts
+   * const outbox = ctx.sibling<OutboxControl>('outbox');
+   * ```
    * @template C The sibling's control interface type.
    * @param {string} featureId The sibling's id inside the parent.
    * @returns {C | undefined} The control interface, or `undefined` while the sibling is not running.
@@ -267,19 +329,37 @@ export interface UnitContext<S> {
   sibling<C extends ControlInterface = ControlInterface>(featureId: string): C | undefined;
   /**
    * @summary Marks the unit busy or idle (`READY` <-> `BUSY`).
-   * @param {boolean} isBusy `true` while doing heavy work.
+   * @description Global State counts busy units to find the platform status.
+   * The call has no effect in other statuses.
+   * @example
+   * Marking heavy work
+   * ```ts
+   * ctx.busy(true);
+   * try { await reindex(); } finally { ctx.busy(false); }
+   * ```
+   * @param {boolean} isBusy `true` during heavy work, `false` after it.
    */
   busy(isBusy: boolean): void;
   /**
    * @summary Reports a failure at runtime.
-   * @description The unit is torn down and moves to `FAILED`; a failed
-   * feature leaves its parent `DEGRADED` (ARCHITECTURE §3.1). Ignored when
-   * the unit is not running. During `init`, throw instead.
+   * @description The kernel tears the unit down and moves it to `FAILED`. A
+   * failed feature makes its parent `DEGRADED` (ARCHITECTURE §3.1). The call
+   * has no effect when the unit does not run. During `init`, throw instead.
+   * @example
+   * Failing when a socket breaks
+   * ```ts
+   * socket.addEventListener('error', () => ctx.fail(new Error('Socket failed.')));
+   * ```
    * @param {unknown} error What went wrong. Its message becomes the lifecycle reason.
    */
   fail(error: unknown): void;
   /**
-   * @summary Returns one of this unit's processors (ARCHITECTURE §8).
+   * @summary Returns one of the processors of this unit (ARCHITECTURE §8).
+   * @example
+   * Running a job on the best available host
+   * ```ts
+   * const total = await ctx.processor<{ items: number[] }, number>('sum').run({ items });
+   * ```
    * @template In The processor's message type.
    * @template Out The processor's result type.
    * @param {string} id The processor's id.
@@ -344,25 +424,92 @@ export interface UnitDefinition<
   S extends object = object,
   C extends ControlInterface = ControlInterface,
 > {
-  /** Stable id. For features: unique inside the parent, without `/`. */
+  /**
+   * @summary The stable id of the unit.
+   * @description A subsystem id is unique in the kernel. A feature id is
+   * unique in its parent. An id must not be empty and must not contain `/`.
+   */
   readonly id: string;
-  /** What must be present for this unit to turn on (ARCHITECTURE §7). */
+  /**
+   * @summary The units that this unit needs (ARCHITECTURE §7).
+   * @description A unit with an unmet required dependency stays
+   * `UNINITIALIZED` and starts when the dependency runs. Optional dependencies
+   * only set the boot order and give access through `ctx.dependency` and `ctx.watch`.
+   */
   readonly requires?: readonly Dependency[];
-  /** Initial state, exposure policy and schema version (ARCHITECTURE §5). */
+  /**
+   * @summary The initial state, its exposure policy and its schema version (ARCHITECTURE §5).
+   */
   readonly state: StateDefinition<S>;
-  /** The "on" switch. May return the "off" switch. Throwing fails the unit. */
+  /**
+   * @summary Turns the unit on.
+   * @description The kernel calls it after the processors start and before
+   * the features start. It can return a {@linkcode Disposer}, which the kernel
+   * calls at teardown. If it throws, the unit goes to `FAILED`.
+   * @example
+   * Starting a timer and stopping it at teardown
+   * ```ts
+   * init: () => {
+   *   const timer = setInterval(poll, 60_000);
+   *   return () => clearInterval(timer);
+   * },
+   * ```
+   * @param {UnitContext<S>} ctx The context of the unit.
+   * @returns {Disposer | void | Promise<Disposer | void>} The disposer, if the unit has one.
+   */
   init?(ctx: UnitContext<S>): Disposer | void | Promise<Disposer | void>;
-  /** Pauses work: the page is hidden or cached, or a dependency stopped (ARCHITECTURE §4). */
+  /**
+   * @summary Pauses the work of the unit (ARCHITECTURE §4).
+   * @description The kernel calls it when the page is hidden or cached, when a
+   * dependency stops, or when an application calls `kernel.unit(id).suspend()`.
+   * @example
+   * Pausing a poller
+   * ```ts
+   * suspend: () => pausePolling(),
+   * ```
+   * @param {UnitContext<S>} ctx The context of the unit.
+   * @returns {void | Promise<void>} Resolves when the work is paused.
+   */
   suspend?(ctx: UnitContext<S>): void | Promise<void>;
-  /** Resumes work after `suspend`. Throwing fails the unit. */
+  /**
+   * @summary Continues the work after `suspend`.
+   * @description If it throws, the unit goes to `FAILED`.
+   * @example
+   * Continuing a poller
+   * ```ts
+   * resume: () => resumePolling(),
+   * ```
+   * @param {UnitContext<S>} ctx The context of the unit.
+   * @returns {void | Promise<void>} Resolves when the work continues.
+   */
   resume?(ctx: UnitContext<S>): void | Promise<void>;
-  /** Work done off (or on) the main thread (ARCHITECTURE §8). Started before `init`. */
+  /**
+   * @summary The processors of the unit: work that can run in a worker (ARCHITECTURE §8).
+   * @description The kernel starts them before `init`. Reach them with `ctx.processor(id)`.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly processors?: readonly ProcessorDef<any, any>[];
-  /** Child units (ARCHITECTURE §3.1). */
+  /**
+   * @summary The child units of the unit (ARCHITECTURE §3.1).
+   * @description A failed feature does not fail its parent. The parent is `DEGRADED` instead.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   readonly features?: readonly UnitDefinition<any, any>[];
-  /** Builds the commands and views. Called after `init` and the features succeed. */
+  /**
+   * @summary Builds the commands and views of the unit.
+   * @description The kernel calls it after `init` and the features start. The
+   * result is the {@linkcode ControlInterface} that other units and applications use.
+   * @example
+   * A command and the state view
+   * ```ts
+   * control: (ctx) => ({
+   *   commands: { increment: () => ctx.state.update((s) => void s.count++) },
+   *   views: { state: ctx.state.readable },
+   * }),
+   * ```
+   * @param {UnitContext<S>} ctx The context of the unit.
+   * @returns {C} The control interface.
+   */
   control(ctx: UnitContext<S>): C;
 }
 
@@ -413,14 +560,35 @@ export interface SubsystemDefinition<
   S extends object = object,
   C extends ControlInterface = ControlInterface,
 > extends UnitDefinition<S, C> {
-  /** How far the subsystem's broadcasts reach (ARCHITECTURE §11). */
+  /**
+   * @summary The scope of the subsystem: how far its broadcasts go (ARCHITECTURE §11).
+   * @description A broadcast always has the scope of its sender. Requests can go to any scope.
+   */
   readonly scope: Scope;
-  /** Centralized subsystems are destroyed only by the platform (ARCHITECTURE §2). */
+  /**
+   * @summary The kind of the subsystem.
+   * @description The kernel boots `centralized` subsystems first, and only the
+   * platform destroys them (ARCHITECTURE §2). All other subsystems are `featurized`.
+   */
   readonly kind: 'centralized' | 'featurized';
-  /** Event ids of broadcasts this subsystem receives. */
+  /**
+   * @summary The event ids of the broadcasts that this subsystem receives.
+   * @description The subsystem must also have a `receive` handler.
+   */
   readonly subscribes?: readonly string[];
   /**
-   * @summary Handles a packet addressed to (or broadcast to) this subsystem.
+   * @summary Handles a packet that is addressed or broadcast to this subsystem.
+   * @description For a request, the return value is the reply. For a
+   * broadcast, the kernel ignores the return value. A throw goes back to the
+   * requester, or into the trail of the broadcast.
+   * @example
+   * Answering a request
+   * ```ts
+   * receive: (packet) => {
+   *   const { key } = packet.take() as { key: string };
+   *   return read(key);
+   * },
+   * ```
    * @param {Packet} packet The packet. Its payload can be taken once.
    * @param {UnitContext<S>} ctx The subsystem's context.
    * @returns {unknown} The reply, for a request. Ignored for broadcasts.

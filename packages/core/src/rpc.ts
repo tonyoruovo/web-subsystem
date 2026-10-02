@@ -64,18 +64,34 @@
  * @public
  */
 export interface PortLike {
-  /** Sends a message to the other side. */
+  /**
+   * @summary Sends a message to the other side.
+   * @param {unknown} message A structured-cloneable message.
+   */
   postMessage(message: unknown): void;
-  /** Listens to incoming messages and deserialization failures. */
+  /**
+   * @summary Listens to incoming messages and to messages that cannot be deserialized.
+   * @param {'message' | 'messageerror'} type The event type.
+   * @param {(event: MessageEvent) => void} listener Called with each event.
+   */
   addEventListener(type: 'message' | 'messageerror', listener: (event: MessageEvent) => void): void;
-  /** Stops listening. */
+  /**
+   * @summary Stops a listener.
+   * @param {'message' | 'messageerror'} type The event type.
+   * @param {(event: MessageEvent) => void} listener The listener to remove.
+   */
   removeEventListener(
     type: 'message' | 'messageerror',
     listener: (event: MessageEvent) => void,
   ): void;
-  /** Starts delivery, for ports that need it. */
+  /**
+   * @summary Starts the delivery of messages.
+   * @description A `MessagePort` that uses `addEventListener` needs this call. Other ports do not have it.
+   */
   start?(): void;
-  /** Closes the port. */
+  /**
+   * @summary Closes the port.
+   */
   close?(): void;
 }
 
@@ -107,11 +123,17 @@ type RpcMessage =
  * @public
  */
 export interface SerializedError {
-  /** The error's `name`, for example `TypeError`. */
+  /**
+   * @summary The `name` of the error, for example `TypeError`.
+   */
   readonly name: string;
-  /** The error's message. */
+  /**
+   * @summary The message of the error.
+   */
   readonly message: string;
-  /** The stack, when available. */
+  /**
+   * @summary The stack of the error, when the other side had one.
+   */
   readonly stack?: string;
 }
 
@@ -138,9 +160,13 @@ export interface SerializedError {
  * @public
  */
 export class RemoteError extends Error {
+  /**
+   * @summary The name of the error on the other side, for example `'TypeError'`.
+   */
   override readonly name: string;
 
   /**
+   * @summary Rebuilds an error that the other side sent.
    * @param {SerializedError} serialized The error from the other side.
    */
   constructor(serialized: SerializedError) {
@@ -168,6 +194,9 @@ export class RemoteError extends Error {
  * @public
  */
 export class RpcTimeoutError extends Error {
+  /**
+   * @summary The name of the error class: `'RpcTimeoutError'`.
+   */
   override readonly name = 'RpcTimeoutError';
 }
 
@@ -191,6 +220,9 @@ export class RpcTimeoutError extends Error {
  * @public
  */
 export class RpcClosedError extends Error {
+  /**
+   * @summary The name of the error class: `'RpcClosedError'`.
+   */
   override readonly name = 'RpcClosedError';
 }
 
@@ -276,6 +308,7 @@ export class RpcEndpoint {
   };
 
   /**
+   * @summary Creates an endpoint on a port, and starts the port.
    * @param {PortLike} port The port to speak over. It is started immediately.
    */
   constructor(port: PortLike) {

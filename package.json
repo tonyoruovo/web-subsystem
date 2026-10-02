@@ -18,7 +18,8 @@
     "check:browsers": "node scripts/check-browsers.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
-    "docs": "typedoc"
+    "docs": "typedoc",
+    "check:docs": "node scripts/check-docs.ts"
   },
   "keywords": [
     "web",

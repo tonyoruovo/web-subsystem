@@ -81,11 +81,21 @@
  * @public
  */
 export interface Dependency {
-  /** The unit depended on: `subsystem` or `subsystem/feature`. */
+  /**
+   * @summary The id of the unit that is needed: `subsystem` or `subsystem/feature`.
+   */
   readonly target: string;
-  /** `required`: the unit stays off without it. `optional`: it runs with reduced behaviour. Default `required`. */
+  /**
+   * @summary How much the unit needs the target.
+   * @description With `required`, the unit stays off without the target. With
+   * `optional`, the unit runs with less behavior. The default is `required`.
+   */
   readonly kind?: 'required' | 'optional';
-  /** The status the target must reach. Default `READY`. */
+  /**
+   * @summary The status that the target must have.
+   * @description The default is `READY`. Use `INITIALIZING` for a unit that
+   * must start while its target starts.
+   */
   readonly when?: 'READY' | 'INITIALIZING';
 }
 
@@ -110,9 +120,13 @@ export interface Dependency {
  * @public
  */
 export interface DependencyNode {
-  /** The unit's full id. */
+  /**
+   * @summary The full id of the unit.
+   */
   readonly id: string;
-  /** Its dependencies. */
+  /**
+   * @summary The dependencies of the unit.
+   */
   readonly requires: readonly Dependency[];
 }
 
@@ -143,12 +157,22 @@ export interface DependencyNode {
  * @public
  */
 export class DependencyCycleError extends Error {
+  /**
+   * @summary The name of the error class: `'DependencyCycleError'`.
+   */
   override readonly name = 'DependencyCycleError';
 
   /**
-   * @param {readonly string[]} cycle The ids along the cycle, first id repeated at the end.
+   * @summary Creates the error for one cycle.
+   * @param {readonly string[]} cycle The ids along the cycle. The first id is repeated at the end.
    */
-  constructor(readonly cycle: readonly string[]) {
+  constructor(
+    /**
+     * @summary The ids along the cycle, for example `['a', 'b', 'a']`.
+     * @description The first id is repeated at the end, so the list shows the full loop.
+     */
+    readonly cycle: readonly string[],
+  ) {
     super(`Required dependencies form a cycle: ${cycle.join(' -> ')}.`);
   }
 }
@@ -214,6 +238,7 @@ export class DependencyGraph {
   readonly #nodes = new Map<string, DependencyNode>();
 
   /**
+   * @summary Builds the graph from all units.
    * @param {Iterable<DependencyNode>} nodes Every unit, in registration order.
    * @throws {Error} When two nodes share an id.
    */
@@ -354,6 +379,7 @@ export class LateBinding<T> {
   #dropped = 0;
 
   /**
+   * @summary Creates an unbound buffer.
    * @param {object} options `capacity` (at least 1) and an optional `onDrop` callback.
    * @throws {RangeError} When `capacity` is below 1.
    */

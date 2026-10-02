@@ -70,10 +70,17 @@ export class WorkerBudget {
   readonly #shared = new Map<string, number>();
 
   /**
+   * @summary Creates a budget with a fixed limit.
    * @param {number} limit The maximum number of physical workers. An integer, at least 1.
    * @throws {RangeError} When `limit` is not an integer of at least 1.
    */
-  constructor(readonly limit: number) {
+  constructor(
+    /**
+     * @summary The maximum number of physical workers that can run at the same time.
+     * @description One shared worker counts one time, however many units use it.
+     */
+    readonly limit: number,
+  ) {
     if (!Number.isInteger(limit) || limit < 1)
       throw new RangeError('The worker budget must be at least 1.');
   }

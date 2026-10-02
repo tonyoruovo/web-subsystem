@@ -78,9 +78,27 @@ export { createMemoryRouteSource, type MemoryRouteSource } from '../route';
  * @public
  */
 export interface TestClock {
-  /** The current time in milliseconds. */
+  /**
+   * @summary Returns the current test time, in milliseconds.
+   * @description Pass it as the `now` option of the code under test.
+   * @example
+   * Giving the clock to a subsystem
+   * ```ts
+   * createLogger({ now: clock.now });
+   * ```
+   * @returns {number} The current time.
+   */
   now(): number;
-  /** Moves the clock forward by `ms`. */
+  /**
+   * @summary Moves the clock forward.
+   * @description Only `now` changes. Timers do not run: use fake timers for them.
+   * @example
+   * Letting a circuit breaker reset
+   * ```ts
+   * clock.advance(30_000);
+   * ```
+   * @param {number} ms The number of milliseconds to add.
+   */
   advance(ms: number): void;
 }
 
@@ -134,7 +152,10 @@ export function createTestClock(start = 0): TestClock {
  * @public
  */
 export interface MemoryPersistence extends StatePersistence {
-  /** Everything saved (or pre-filled), by unit id. */
+  /**
+   * @summary All saved and pre-filled states, by unit id.
+   * @description Tests read it to check what a unit persisted.
+   */
   readonly saved: ReadonlyMap<string, PersistedState<object>>;
 }
 
@@ -204,23 +225,86 @@ export function createMemoryPersistence(
  * @public
  */
 export interface TestPlatform {
-  /** The real kernel. */
+  /**
+   * @summary The real kernel that runs the units.
+   */
   readonly kernel: Kernel;
-  /** The platform's clock. */
+  /**
+   * @summary The clock of the platform.
+   */
   readonly clock: TestClock;
-  /** Every envelope routed so far, in order. */
+  /**
+   * @summary All envelopes that the router got, oldest first.
+   */
   readonly routed: readonly PacketEnvelope[];
-  /** Every error reported by the kernel, instead of logging it. */
-  readonly errors: readonly { readonly error: unknown; readonly unitId: string }[];
-  /** Starts the kernel and settles. */
+  /**
+   * @summary All errors that the kernel reported, oldest first.
+   * @description The platform keeps them here instead of writing them to the console.
+   */
+  readonly errors: readonly {
+    /**
+     * @summary The error.
+     */
+    readonly error: unknown;
+    /**
+     * @summary The id of the unit that reported it.
+     */
+    readonly unitId: string;
+  }[];
+  /**
+   * @summary Starts the kernel and waits until it settles.
+   * @example
+   * Booting the units of a test
+   * ```ts
+   * await platform.start();
+   * ```
+   * @returns {Promise<void>} Resolves after the boot.
+   */
   start(): Promise<void>;
-  /** Stops the kernel. */
+  /**
+   * @summary Stops the kernel.
+   * @example
+   * Testing what a unit persists
+   * ```ts
+   * await platform.stop();
+   * expect(persistence.saved.get('logger')).toBeDefined();
+   * ```
+   * @returns {Promise<void>} Resolves after all units are destroyed.
+   */
   stop(): Promise<void>;
-  /** Waits for dependency reconciliation and pending view notifications. */
+  /**
+   * @summary Waits for the dependency reconciliation and the pending view notifications.
+   * @example
+   * Checking a status after a change
+   * ```ts
+   * fail(new Error('crash'));
+   * await platform.settle();
+   * ```
+   * @returns {Promise<void>} Resolves when nothing is pending.
+   */
   settle(): Promise<void>;
-  /** A handle on a unit. */
+  /**
+   * @summary Returns a handle on a unit.
+   * @example
+   * Reading a control interface
+   * ```ts
+   * const logger = platform.unit<LoggerControl>('logger').control!;
+   * ```
+   * @template C The control interface type.
+   * @param {string} id The full id of the unit.
+   * @returns {UnitHandle<C>} The handle.
+   */
   unit<C extends ControlInterface = ControlInterface>(id: string): UnitHandle<C>;
-  /** The current status of a unit. */
+  /**
+   * @summary Returns the current status of a unit.
+   * @example
+   * Checking a status
+   * ```ts
+   * expect(platform.status('storage/idb')).toBe('FAILED');
+   * ```
+   * @param {string} id The full id of the unit.
+   * @returns {UnitStatus} The status.
+   */
   status(id: string): UnitStatus;
 }
 

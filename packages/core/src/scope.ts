@@ -148,6 +148,9 @@ export function reaches(scope: Scope, relation: Relation): boolean {
  * @public
  */
 export class ScopeViolationError extends Error {
+  /**
+   * @summary The name of the error class: `'ScopeViolationError'`.
+   */
   override readonly name = 'ScopeViolationError';
 }
 

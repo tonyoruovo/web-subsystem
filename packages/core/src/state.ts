@@ -72,9 +72,15 @@ import { createStore, deriveView, type Schedule, type View } from './view';
  * @public
  */
 export interface Exposure {
-  /** Visible through the control interface. */
+  /**
+   * @summary Shows the key in `ctx.state.readable`, and so in the control interface.
+   * @description The default is `false`: the key stays private to the unit.
+   */
   readonly readable?: boolean;
-  /** Written out by persistence and restored on the next boot. */
+  /**
+   * @summary Saves the key through the kernel's persistence and restores it at the next boot.
+   * @description The default is `false`.
+   */
   readonly persisted?: boolean;
 }
 
@@ -126,11 +132,21 @@ export type ExposurePolicy<S> = { readonly [K in keyof S]?: Exposure };
  * @public
  */
 export interface StateDefinition<S> {
-  /** The initial value. Must be structured-cloneable. */
+  /**
+   * @summary The initial value of the state.
+   * @description The value must be structured-cloneable.
+   */
   readonly initial: S;
-  /** Per-key exposure. Keys left out are private. */
+  /**
+   * @summary The exposure of each key.
+   * @description A key that is not in the policy is private and not persisted.
+   */
   readonly policy?: ExposurePolicy<S>;
-  /** Schema version of the persisted keys. Persisted state from another version is ignored. Defaults to `1`. */
+  /**
+   * @summary The schema version of the persisted keys.
+   * @description The kernel ignores persisted state from another version. The
+   * default is `1`. Increase it when the shape of a persisted key changes.
+   */
   readonly version?: number;
 }
 
@@ -161,9 +177,13 @@ export interface StateDefinition<S> {
  * @public
  */
 export interface PersistedState<S> {
-  /** The state definition's version when this was written. */
+  /**
+   * @summary The version of the state definition when the state was saved.
+   */
   readonly version: number;
-  /** The persisted keys. */
+  /**
+   * @summary The values of the persisted keys.
+   */
   readonly data: Partial<S>;
 }
 
@@ -190,9 +210,13 @@ export interface PersistedState<S> {
  * @public
  */
 export class StateSerializationError extends Error {
+  /**
+   * @summary The name of the error class: `'StateSerializationError'`.
+   */
   override readonly name = 'StateSerializationError';
 
   /**
+   * @summary Creates the error for one refused state.
    * @param {string} unitId The unit whose state was rejected.
    * @param {unknown} cause The error from `structuredClone`.
    */

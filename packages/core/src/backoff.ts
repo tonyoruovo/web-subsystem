@@ -89,19 +89,40 @@ export type BackoffStrategy =
  * @public
  */
 export interface BackoffOptions {
-  /** The starting wait, in milliseconds. */
+  /**
+   * @summary The first wait, in milliseconds.
+   * @description All strategies scale this value.
+   */
   readonly base: number;
-  /** Failures so far (1 for the first retry). */
+  /**
+   * @summary The number of failures until now.
+   * @description Use 1 for the first retry. The wait grows with this number.
+   */
   readonly attempts: number;
-  /** The formula. Default `exponential`. */
+  /**
+   * @summary The formula that computes the wait.
+   * @description The default is `exponential`.
+   */
   readonly strategy?: BackoffStrategy;
-  /** Growth factor for `multiplicative-exponential`, or milliseconds per attempt for `linear`. Default `1.5`. */
+  /**
+   * @summary The growth factor of `multiplicative-exponential`, or the step of `linear`.
+   * @description For `linear`, the value is in milliseconds for each attempt. The default is `1.5`.
+   */
   readonly multiplier?: number;
-  /** The previous wait, for `decorrelated-jitter`. Default `base`. */
+  /**
+   * @summary The previous wait, for `decorrelated-jitter`.
+   * @description The default is `base`.
+   */
   readonly previousWait?: number;
-  /** The longest wait returned. Default: the larger of 30000 and `base * 100`. */
+  /**
+   * @summary The longest wait to return, in milliseconds.
+   * @description The default is the larger of 30000 and `base * 100`.
+   */
   readonly maxCapMs?: number;
-  /** A random number in [0, 1). Default: `crypto.getRandomValues`. */
+  /**
+   * @summary Returns a random number from 0 (included) to 1 (not included).
+   * @description The default uses `crypto.getRandomValues`. Tests give a fixed value.
+   */
   readonly random?: () => number;
 }
 

@@ -99,7 +99,7 @@
 
 # Subsystems
 
-> **Amended 2026-10-01** with amendments A1–A10 from [`docs/ARCHITECTURE.md` §15](../docs/ARCHITECTURE.md#15-amendments-to-proposalsreadmemd). Each amended rule is tagged with its amendment number. This document still takes precedence over every other definition.
+> **Amended 2026-10-01** (A1–A10) **and 2026-10-02** (A11) with amendments A1–A11 from [`docs/ARCHITECTURE.md` §15](../docs/ARCHITECTURE.md#15-amendments-to-proposalsreadmemd). Each amended rule is tagged with its amendment number. This document still takes precedence over every other definition.
 
 A subsystem is a program in a frontend application (such a browser) that has a `state`, `features`, `packets` and a `control-interface`. Some subsystems are state heavy such as the global state, others are processor, scheduler or destructor heavy.
 
@@ -111,7 +111,7 @@ Subsystems have a scope depending on what they intend to do
 
 - **Page**: This scope is limited to the url and will be destroyed when it's path (on the url) changes. It can only broadcast to other page-bound subsystems, but may receive from any subsystem
 - **Tab**: This scope is limited to the browsing tab. It can only broadcast to tab-bound subsystems, but may receive from any
-- **Window**: This scope spans every tab of the same site, across its subdomains, within a browser session. Because subdomains are different origins, it is carried by a hub page served from the apex domain. It can only broadcast to window-bound subsystems, but may receive from any _(A2)_
+- **Window**: This scope spans every tab of the same site, across its subdomains, within a browser session. Because subdomains are different origins, it is carried by a hub page served from the apex domain, and by the Global transport as a relay in browsers that partition the hub (WebKit). It can only broadcast to window-bound subsystems, but may receive from any _(A2, A11)_
 - **Global**: This scope is backed by the server and reaches every session and device. It can send & receive packets to and from any _(A3)_
 
 The send restriction applies to **broadcasts (1-to-many) only**. A 1-to-1 request may target a subsystem in any reachable scope, and its reply always returns to the requester. _(A1)_

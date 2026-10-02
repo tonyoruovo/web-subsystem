@@ -125,13 +125,15 @@ No code is written until both steps are done.
 
 *Goal: broadcasts across tabs and subdomains.*
 
-- **Spike first:** confirm that the hub iframe shares one storage and `BroadcastChannel` partition across subdomains in every supported browser. If it doesn't, stop and revise §11.3.
+- **Spike first:** confirm that the hub iframe shares one storage and `BroadcastChannel` partition across subdomains in every supported browser. If it doesn't, stop and revise §11.3. _Done 2026-10-02: WebKit partitions the hub by top-level origin (`spikes/m5-hub/FINDINGS.md`); §11.3 revised by amendment A11._
 - `hub`: the static hub page served from the apex, the client, origin allowlists, reconnect handling, and the direct mode for tabs on the apex
+- Partition detection (partition id and the apex-domain window cookie), the relay interface with deduplication by `messageId`, and the reported reach (§11.3). The relay is tested against an in-memory double; the real one is the Global transport (M8).
+- Scope relays in the kernel: the NotificationCenter hands Window broadcasts to the attached relay, and the Queue ingests envelopes from other tabs
 - Deployment notes for the apex: the hub path, `frame-ancestors`, and no `X-Frame-Options` on that path
 - The single-origin mode without an iframe
 - Move consent to Window scope
 
-**Gate:** a broadcast from `a.<site>` reaches subscribers on `b.<site>` in a multi-origin browser test, and the origin checks reject a foreign origin.
+**Gate:** a broadcast from `a.<site>` reaches subscribers on `b.<site>` in a multi-origin browser test (through the hub where it is shared, through the relay double where it is partitioned), and the origin checks reject a foreign origin.
 
 ### M6 — Data foundation: Crypto and Storage
 
@@ -154,6 +156,7 @@ No code is written until both steps are done.
 
 - The Global transport as a Realtime feature, with Network fallback (§11.4)
 - Persistence and replay of outgoing Global packets while offline
+- The Window relay (§11.3): the Global transport forwards Window-scope envelopes between connections with the same window id
 - Wire-protocol documentation and conformance fixtures that backend teams can run against their own servers
 - An in-memory server test double, used only in this repo's tests and never published
 

@@ -422,7 +422,7 @@ const kernel = new Kernel([globalState, queue.subsystem, notification.subsystem,
 - Access control per event: which subsystems may publish it, and which may receive it.
 - A circuit breaker per subscriber stops calling one that keeps failing, and retries it after a timeout.
 - History: the last N broadcasts with one trail each, covering every delivery.
-- In-realm subscribers are on the same page and tab, so Page and Tab broadcasts reach them all. Window (M5) and Global (M8) relays plug in later.
+- In-realm subscribers are on the same page and tab, so Page and Tab broadcasts reach them all. Window (M5) and Global (M8) broadcasts also go to the **scope relay** attached for their scope (§11.3); envelopes from other tabs come back through the Queue.
 
 **Kernel additions**
 - `ctx.statuses`: every unit's lifecycle, read-only, for every unit.
@@ -440,7 +440,7 @@ const kernel = new Kernel([globalState, queue.subsystem, notification.subsystem,
 |---|---|---|
 | **Page** | One document **and** route. Ends when the path changes (router or Navigation API hook) or the document unloads. A page restored from bfcache resumes from `SUSPENDED`. | In-realm dispatch |
 | **Tab** | One top-level browsing context, across the documents it loads. State moves between documents through `sessionStorage`. | In-realm dispatch |
-| **Window** | All tabs of the same **site**, across its subdomains, in one browser profile session. | The **hub** (§11.3) |
+| **Window** | All tabs of the same **site**, across its subdomains, in one browser profile session. | The **hub**, plus the relay where the browser partitions it (§11.3) |
 | **Global** | All sessions and devices, through the **server**. | The Global transport (§11.4) |
 
 ### 11.2 Send rule
@@ -464,9 +464,9 @@ interface RouteSource {
 
 The default route source uses the Navigation API when it is present, and otherwise falls back to `popstate` plus wrapping `history.pushState` and `history.replaceState`. A router adapter (for example `vue-router`'s `afterEach`) can replace it (§14.1).
 
-### 11.3 Window scope: the hub
+### 11.3 Window scope: the hub and the relay
 
-`BroadcastChannel`, `SharedWorker`, and IndexedDB are bound to an **origin**. Subdomains are different origins. Window scope therefore needs a hub:
+`BroadcastChannel`, `SharedWorker`, and IndexedDB are bound to an **origin**. Subdomains are different origins. Window scope therefore needs a hub, and, where the browser partitions the hub, a relay (amendment A11):
 
 ```text
  a.example.com tab                     b.example.com tab
@@ -474,16 +474,33 @@ The default route source uses the Navigation API when it is present, and otherwi
  │ app          │                      │ app          │
  │  └ iframe ───┼── postMessage ──┐ ┌──┼── iframe     │
  └──────────────┘                 ▼ ▼  └──────────────┘
-                      hub.example.com (hub page, same site)
-                      BroadcastChannel / SharedWorker on the hub origin
+                      example.com/__platform/hub.html  (hub page, on the apex)
+                      BroadcastChannel on the apex origin
+        │                                                      │
+        └──── relay: the Global transport (§11.4), only ───────┘
+              where the hub is partitioned
 ```
+
+**The hub**
 
 - The `@platform/hub` package ships a static hub page. The app deploys it on the **apex** origin of the site (for example `https://example.com/__platform/hub.html`; the path is configurable).
 - The apex must allow its subdomains to frame the hub page: `Content-Security-Policy: frame-ancestors https://example.com https://*.example.com`, and no `X-Frame-Options` header on that path (`SAMEORIGIN` would block subdomains, because they are different origins).
 - Tabs on the apex itself are on the hub's origin. They join the hub's `BroadcastChannel` directly, without an iframe.
 - The iframe checks `event.origin` against an allowlist of the site's origins, and the hub does the same. Messages are envelopes only.
-- **Single-origin apps** use the same interface without an iframe. The hub runs on the app's own origin through `BroadcastChannel`/`SharedWorker`.
-- **Risk:** browsers partition storage for third-party contexts. The hub is same-site, so it is expected to share one partition across subdomains. Milestone M5 starts with a spike that verifies this in each supported browser.
+- **Single-origin apps** use the same interface without an iframe. The hub runs on the app's own origin through `BroadcastChannel`.
+
+**Partitioning (the M5 spike, `spikes/m5-hub/FINDINGS.md`)**
+
+- Chromium-based browsers give every framed copy of the hub one partition: the hub works as designed. Firefox keys partitions by site and is expected to do the same (unverified on the development machine).
+- **WebKit (Safari, and every browser on iOS) partitions the hub's `BroadcastChannel`, IndexedDB and `SharedWorker` by the top-level origin.** A hub framed by `a.example.com` never meets one framed by `b.example.com`.
+
+**Detecting it.** Every hub keeps a random **partition id** in its IndexedDB, which is partitioned the same way as its `BroadcastChannel`. The client compares it with a session cookie on the apex domain (`Domain=example.com`, `SameSite=Lax`), which top-level pages on every subdomain share in every browser. The first tab writes its partition id; a tab whose id matches marks the hub `shared`; a tab whose id differs marks it `partitioned`. Until a second origin has connected, the hub is `unknown`. The same cookie carries the **window id**, a random id for this browser session, which the relay uses.
+
+**The relay.** While the hub is not known to be `shared`, the client also sends every Window broadcast to the **relay**: the Global transport (§11.4), which forwards a Window-scope envelope to every connection that presented the same window id. Receivers deduplicate by `messageId`, so a broadcast that arrives through both paths is delivered once. Without a Global transport, Window scope on a partitioned browser reaches only the tabs on the same origin.
+
+**Reach.** The client exposes its reach: `site` (the hub is shared, or the relay is connected), `origin` (the hub is partitioned and there is no relay), or `unknown`. Apps that need cross-subdomain delivery on every browser configure a Global transport.
+
+**In the kernel.** The Window client is a subsystem (`window`). It attaches to the NotificationCenter as a **scope relay**: after a local fan-out, the NotificationCenter hands every locally sent Window broadcast to it. Envelopes from other tabs enter through the Queue (`ingest`), which deduplicates them and fans them out locally; the sender's exclusion applies only to the tab that sent it.
 
 ### 11.4 Global scope: the server
 
@@ -492,6 +509,7 @@ Global scope is **server-backed**. Its transport is a feature of Realtime, with 
 - **Online:** envelopes travel over WebSocket or SSE. If neither is available, HTTP long-polling is used.
 - **Offline:** the Queue persists outgoing Global packets (through Storage) and replays them on reconnect.
 - **Delivery:** at least once. Receivers deduplicate by `messageId`.
+- **Window relay:** a Window-scope envelope carries the sender's `window` id. The server forwards it to every other connection that presented the same window id, and nowhere else (§11.3).
 - **Wire protocol:** a versioned JSON envelope schema, published in `@platform/core`, which servers implement. This project ships **only the wire protocol**: the schema, its documentation, and conformance fixtures. Servers are built by the app's own backend. The test suite uses a minimal in-memory test double that is never published.
 
 ---
@@ -585,6 +603,7 @@ An adapter exists only where a framework can do something better than the neutra
 | A8 | One lifecycle state machine, adding `DEGRADED` and `SUSPENDED` (§4). | Decided |
 | A9 | Control-interface "setters" are commands the unit performs on itself (§6). | Decided |
 | A10 | The NotificationCenter holds no queue. All packets enter through the Queue (§10). | Decided |
+| A11 | Window scope uses the hub where the browser gives it one partition, and the Global transport as a relay where it does not (WebKit); the client reports its reach (§11.3). | Decided |
 
 ## 16. Corrections to the per-subsystem proposals
 

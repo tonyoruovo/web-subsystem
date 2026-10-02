@@ -19,10 +19,15 @@
  *
  *   views.grants   effective grant per category
  *   views.pending  categories to ask the user about (no decision under the current policy)
+ *
+ *   Window scope: every tab of the site shares the decisions (ARCHITECTURE §11.3)
+ *     a change here      --> 'consent:changed' reaches the Consent of every other tab --> merged
+ *     this tab starts    --> 'consent:sync' --> other tabs answer 'consent:state' (their records) --> merged
+ *     merge              per category, the newer decision wins
  *   ```
  *
  * Retention and data-subject requests (export, erase) need Storage and arrive
- * with it in M6. Consent moves to Window scope in M5.
+ * with it in M6.
  *
  * @example
  * Gating analytics
@@ -56,6 +61,20 @@ export const CONSENT_ID = 'consent';
  * @public
  */
 export const CONSENT_CHANGED = 'consent:changed';
+
+/**
+ * @summary The event a starting Consent broadcasts to ask the other tabs for their decisions.
+ * @constant {'consent:sync'}
+ * @public
+ */
+export const CONSENT_SYNC = 'consent:sync';
+
+/**
+ * @summary The event other tabs answer `consent:sync` with: their records, as {@linkcode ConsentRecord}s.
+ * @constant {'consent:state'}
+ * @public
+ */
+export const CONSENT_STATE = 'consent:state';
 
 /**
  * @summary The category that is always granted: essential use never depends on consent.
@@ -244,13 +263,60 @@ export function isConsentGranted(
 }
 
 /**
+ * @summary Merges decisions from another tab: per category, the newer decision wins.
+ *
+ * @description
+ * Returns the merged records and the incoming records that won. Records for
+ * `necessary` and for categories not in `categories` are ignored. On equal
+ * timestamps the local decision stays.
+ *
+ * @example
+ * Example 1: A newer grant from another tab
+ * ```ts
+ * mergeConsentRecords({}, [{ category: 'analytics', granted: true, timestamp: 2, policyVersion: 1 }], ['analytics']);
+ * // { records: { analytics: {...} }, applied: [{ category: 'analytics', ... }] }
+ * ```
+ *
+ * @example
+ * Example 2: An older one loses
+ * ```ts
+ * mergeConsentRecords({ analytics: newer }, [older], ['analytics']).applied; // []
+ * ```
+ *
+ * @param {Readonly<Record<string, ConsentRecord>>} local This tab's records.
+ * @param {readonly ConsentRecord[]} incoming Records from another tab.
+ * @param {readonly string[]} categories The known categories.
+ * @returns {{ records: Record<string, ConsentRecord>; applied: ConsentRecord[] }} The merge and the records that won.
+ *
+ * @public
+ */
+export function mergeConsentRecords(
+  local: Readonly<Record<string, ConsentRecord>>,
+  incoming: readonly ConsentRecord[],
+  categories: readonly string[],
+): { records: Record<string, ConsentRecord>; applied: ConsentRecord[] } {
+  const records = { ...local };
+  const applied: ConsentRecord[] = [];
+  for (const record of incoming) {
+    if (record.category === NECESSARY || !categories.includes(record.category)) continue;
+    const current = records[record.category];
+    if (current && current.timestamp >= record.timestamp) continue;
+    records[record.category] = record;
+    applied.push(record);
+  }
+  return { records, applied };
+}
+
+/**
  * @summary Creates the Consent subsystem.
  *
  * @description
- * Returns the subsystem definition (id {@linkcode CONSENT_ID}, featurized, Tab
- * scope until M5). Decisions persist through the kernel's `persistence`.
- * Every change is broadcast as {@linkcode CONSENT_CHANGED}; a failed
- * broadcast is reported, and the change stands.
+ * Returns the subsystem definition (id {@linkcode CONSENT_ID}, featurized,
+ * Window scope). Decisions persist through the kernel's `persistence`. Every
+ * change is broadcast as {@linkcode CONSENT_CHANGED}; a failed broadcast is
+ * reported, and the change stands. With the Window transport (`window`,
+ * `@platform/hub`), every tab of the site shares the decisions; Consent
+ * starts after it, so its first `consent:sync` leaves the tab.
  *
  * @example
  * Example 1: Registering
@@ -287,8 +353,10 @@ export function createConsent(
 
   return defineSubsystem({
     id: CONSENT_ID,
-    scope: 'tab',
+    scope: 'window',
     kind: 'featurized',
+    requires: [{ target: 'window', kind: 'optional' }],
+    subscribes: [CONSENT_CHANGED, CONSENT_SYNC, CONSENT_STATE],
     state: {
       initial: { policyVersion, categories, records: {} } as ConsentData,
       policy: {
@@ -297,6 +365,31 @@ export function createConsent(
         records: { readable: true, persisted: true },
       },
       version: 1,
+    },
+    init(ctx) {
+      ctx.port
+        .send({ eventId: CONSENT_SYNC, payload: null, importance: 'HIGH' })
+        .catch((error: unknown) => ctx.report(error));
+    },
+    receive(packet, ctx) {
+      const { eventId } = packet.header;
+      if (eventId === CONSENT_SYNC) {
+        const mine = Object.values(ctx.state.get().records);
+        if (mine.length === 0) return;
+        ctx.port
+          .send({ eventId: CONSENT_STATE, payload: mine, importance: 'HIGH' })
+          .catch((error: unknown) => ctx.report(error));
+        return;
+      }
+      // consent:changed or consent:state from another tab (a tab never hears its own).
+      const incoming = packet.take();
+      if (!Array.isArray(incoming)) return;
+      const { records, applied } = mergeConsentRecords(
+        ctx.state.get().records,
+        incoming as ConsentRecord[],
+        categories,
+      );
+      if (applied.length > 0) ctx.state.update((s) => void (s.records = records));
     },
     control: (ctx) => {
       const records = () => ctx.state.get().records;

@@ -65,20 +65,25 @@ const stop = commands.subscribe('auth:login', (payload) => showWelcome(payload),
 });
 views.history.subscribe(() => console.table(views.history.getSnapshot()));
 
+// Window and Global broadcasts sent from this tab also go to the relay attached for their scope
+// (the Window transport attaches itself; see @platform/hub).
+const detach = commands.attachRelay({ scope: 'window', publish: (envelope) => send(envelope) });
+
 // The history keeps the last `historySize` records; observe to see every one.
 const stopObserving = commands.observe((record) => archive(record));
 ```
 
 ## Behaviour
 
-| Situation                                        | Result                                                                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| The source is not in the event's `publishers`    | `BroadcastRejectedError`; recorded as `rejected`                                 |
-| `strict: true` and the event is not registered   | `BroadcastRejectedError`                                                         |
-| A subscriber is not in the event's `subscribers` | Not delivered                                                                    |
-| A subscriber throws                              | Recorded as `failed`; the broadcast and the sender are unaffected                |
-| `failureThreshold` failures in a row             | The subscriber's circuit opens and it is `skipped` until `resetTimeoutMs` passes |
-| The sender subscribes to its own event           | It does not receive its own broadcast                                            |
+| Situation                                        | Result                                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| The source is not in the event's `publishers`    | `BroadcastRejectedError`; recorded as `rejected`                                       |
+| `strict: true` and the event is not registered   | `BroadcastRejectedError`                                                               |
+| A subscriber is not in the event's `subscribers` | Not delivered                                                                          |
+| A subscriber throws                              | Recorded as `failed`; the broadcast and the sender are unaffected                      |
+| `failureThreshold` failures in a row             | The subscriber's circuit opens and it is `skipped` until `resetTimeoutMs` passes       |
+| The sender subscribes to its own event           | It does not receive its own broadcast                                                  |
+| A broadcast from another tab (`remote: true`)    | Delivered to every subscriber, including one with the sender's id; never relayed again |
 
 Each history record's trail is the sender's fingerprints, then `fanned-out`, then one entry per delivery (`delivered`, `failed` or `skipped`, with the subscriber as `componentId`).
 

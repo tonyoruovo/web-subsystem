@@ -1,6 +1,6 @@
 > **Amendments (M4, 2026-10-02).** These override the text below wherever they conflict. See [ARCHITECTURE §13](../docs/ARCHITECTURE.md#13-subsystem-catalogue) and [§17](../docs/ARCHITECTURE.md#17-pilot-retrospective-m4).
 >
-> - Consent is Tab-scoped until M5, which moves it to Window scope.
+> - Consent is Window-scoped (M5): every tab of the site shares the decisions. A starting tab broadcasts `consent:sync`; open tabs answer `consent:state` with their records; per category, the newer decision wins.
 > - Grants persist through the kernel's `persistence` (Storage backs it from M6). There is no direct Storage dependency.
 > - Categories are configurable and must include `necessary`. Changing an unknown category throws `RangeError`; checking one returns `false`.
 > - `set(decisions)` records several decisions with one broadcast. `consent:changed` carries the list of effective changes, with importance HIGH.

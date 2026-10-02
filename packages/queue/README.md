@@ -71,6 +71,9 @@ views.state.subscribe(() => console.log(views.state.getSnapshot())); // depth, i
 await commands.bindDeadLetterSink((letter) => storage.commands.append('dead-letters', letter));
 commands.replay(messageId);
 
+// Broadcasts from other tabs (the Window transport calls this): deduplicated, then fanned out here.
+await commands.ingest(envelope);
+
 // `views.trails` keeps the last `trailHistory` packets; observe to see every one (the Logger does).
 const stop = commands.observe((settled) => archive(settled));
 ```

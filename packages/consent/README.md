@@ -2,13 +2,14 @@
 
 > **Pre-alpha (`0.0.2`).** Not published to npm yet. `@platform` is a placeholder scope until milestone M9.
 
-The **Consent** subsystem (id `consent`, featurized, Tab scope; Window scope from M5). It records what the user agreed to, per category, under a **policy version**, and answers the question every telemetry path asks: `isGranted(category)`.
+The **Consent** subsystem (id `consent`, featurized, Window scope). It records what the user agreed to, per category, under a **policy version**, and answers the question every telemetry path asks: `isGranted(category)`.
 
 - **Fails closed**: a category without a current grant is off.
 - **`necessary` is always granted**: essential use never depends on consent.
 - **Policy versions**: raise the version and every earlier decision stops counting; `views.pending` lists what to ask again.
 - **Persisted**: decisions are kept through the kernel's persistence (Storage, from M6).
 - **Broadcast**: every change is announced as `consent:changed`.
+- **Shared by every tab of the site** (Window scope, with `@platform/hub`'s Window transport): a decision in one tab reaches the others, and a new tab asks the open ones for theirs (`consent:sync`, answered with `consent:state`). Per category, the newer decision wins.
 
 Retention rules and data-subject requests (export, erase) need Storage and arrive with it in M6. Design: [ARCHITECTURE §13](../../docs/ARCHITECTURE.md#13-subsystem-catalogue) and the amended [Consent proposal](../../proposals/consent_PROPOSAL.md).
 
@@ -79,6 +80,8 @@ receive: (packet) => {
 | An explicit "no" for an undecided category | Recorded (it leaves `pending`), not broadcast (the gate did not change)                   |
 | A category not in `categories`             | `RangeError`                                                                              |
 | The broadcast is refused                   | Reported to the kernel's `onError`; the decision stands                                   |
+| A decision arrives from another tab        | Merged: the newer decision per category wins; views update                                |
+| This tab starts                            | Broadcasts `consent:sync`; open tabs answer with their records                            |
 
 ## Options
 

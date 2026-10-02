@@ -540,7 +540,7 @@ Shutdown runs disposers in reverse order. Persisting state is part of each unit'
 | Logger | featurized | Tab | virtual | — (late-bound: NotificationCenter, Storage) | `logger` |
 | Crypto | featurized | Tab (key cache shared per origin) | shared → dedicated → virtual | — | `crypto` |
 | Storage | featurized | Tab (coordinator shared per origin) | shared → virtual | — (optional: Crypto) | `storage`, backends |
-| Consent | featurized | Window (Tab until M5) | virtual | — (grants persist through the kernel's persistence, which Storage backs from M6) | `consent` |
+| Consent | featurized | Window | virtual | — (grants persist through the kernel's persistence, which Storage backs from M6) | `consent` |
 | Settings | featurized | Window | virtual | Consent | `settings` |
 | Network | featurized | Tab | virtual | GlobalState | `network` |
 | Auth | featurized | Window | virtual (crypto delegated) | Storage, Network | `auth` |

@@ -178,6 +178,8 @@ init(ctx) {
 }
 ```
 
+Window and Global broadcasts also leave the tab through a `ScopeRelay` (`{ scope, publish(envelope) }`) attached to the NotificationCenter; receivers drop repeats with `createDeduplicator(capacity)`.
+
 `ctx.report(error)` sends an error the unit recovered from (a failed write, a refused broadcast) to the kernel's `onError`, without changing its lifecycle.
 
 ### State and views

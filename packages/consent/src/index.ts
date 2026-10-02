@@ -9,9 +9,10 @@
  *
  * ```text
  *   @platform/consent
- *   +-- createConsent      the subsystem: id 'consent', featurized, Tab scope (Window from M5)
+ *   +-- createConsent      the subsystem: id 'consent', featurized, Window scope
  *   +-- isConsentGranted   necessary always; otherwise granted under the current policy
  *   +-- CONSENT_CHANGED    'consent:changed', broadcast with every change
+ *   +-- CONSENT_SYNC, CONSENT_STATE, mergeConsentRecords   sharing decisions between tabs
  *   +-- NECESSARY, DEFAULT_CATEGORIES
  *   +-- types              ConsentControl, ConsentData, ConsentRecord, ConsentChange, ConsentOptions
  *   ```

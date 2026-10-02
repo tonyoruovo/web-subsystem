@@ -270,6 +270,15 @@ importers:
       '@platform/core':
         specifier: workspace:*
         version: link:../core
+      '@platform/hub':
+        specifier: workspace:*
+        version: link:../hub
+      '@platform/notification':
+        specifier: workspace:*
+        version: link:../notification
+      '@platform/queue':
+        specifier: workspace:*
+        version: link:../queue
 
   packages/core:
     dependencies:

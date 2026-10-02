@@ -16,7 +16,10 @@
     "@platform/core": "workspace:*"
   },
   "devDependencies": {
-    "@platform/core": "workspace:*"
+    "@platform/core": "workspace:*",
+    "@platform/hub": "workspace:*",
+    "@platform/notification": "workspace:*",
+    "@platform/queue": "workspace:*"
   },
   "license": "ISC"
 }

@@ -538,7 +538,8 @@ export function createQueue(options: QueueOptions = {}): Queue {
         unbindDeadLetterSink: () => sink.unbind(),
         async ingest(envelope: PacketEnvelope): Promise<boolean> {
           const kernel = lastKernel;
-          if (!kernel || stopped) throw new QueueRejectedError('stopped', envelope.metadata.messageId);
+          if (!kernel || stopped)
+            throw new QueueRejectedError('stopped', envelope.metadata.messageId);
           const { metadata } = envelope;
           if (metadata.target !== null || metadata.scope === 'page' || metadata.scope === 'tab') {
             refuse(envelope, 'scope', 'Only Window and Global broadcasts arrive from other tabs.');

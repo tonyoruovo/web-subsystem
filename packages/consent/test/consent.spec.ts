@@ -10,8 +10,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CONSENT_CHANGED,
   CONSENT_ID,
+  DEFAULT_CATEGORIES,
   createConsent,
   isConsentGranted,
+  mergeConsentRecords,
   type ConsentChange,
   type ConsentControl,
   type ConsentOptions,
@@ -121,9 +123,40 @@ describe('Consent', () => {
     });
     await kernel.start();
     const control = kernel.unit<ConsentControl>(CONSENT_ID).control!;
+    await vi.waitFor(() => expect(errors).toHaveLength(1)); // the startup consent:sync
     expect(control.commands.grant('analytics')).toBe(true);
-    await vi.waitFor(() => expect(errors).toEqual([new Error('refused')]));
+    await vi.waitFor(() => expect(errors).toEqual([new Error('refused'), new Error('refused')]));
     expect(control.commands.isGranted('analytics')).toBe(true);
+  });
+});
+
+describe('mergeConsentRecords', () => {
+  const record = (category: string, timestamp: number, granted = true) => ({
+    category,
+    granted,
+    timestamp,
+    policyVersion: 1,
+  });
+
+  it('keeps the newer decision per category, and ignores necessary and unknown categories', () => {
+    const local = { analytics: record('analytics', 5), marketing: record('marketing', 5) };
+    const { records, applied } = mergeConsentRecords(
+      local,
+      [
+        record('analytics', 9, false),
+        record('marketing', 5, false), // a tie: the local one stays
+        record('functional', 1),
+        record('necessary', 9, false),
+        record('telepathy', 9),
+      ],
+      DEFAULT_CATEGORIES,
+    );
+    expect(applied.map((r) => r.category)).toEqual(['analytics', 'functional']);
+    expect(records).toEqual({
+      analytics: record('analytics', 9, false),
+      marketing: record('marketing', 5),
+      functional: record('functional', 1),
+    });
   });
 });
 

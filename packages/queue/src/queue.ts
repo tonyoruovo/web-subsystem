@@ -115,9 +115,18 @@ import {
  * @public
  */
 export interface Queue {
+  /**
+   * @summary The subsystem to register with the kernel: id `queue`, centralized, Tab scope.
+   */
   readonly subsystem: SubsystemDefinition<QueueData, QueueControl>;
   /**
-   * @summary Builds the kernel's packet router.
+   * @summary Builds the packet router of the kernel.
+   * @description Give it to the kernel as the `router` option. The kernel calls it one time.
+   * @example
+   * Wiring the Queue
+   * ```ts
+   * new Kernel([queue.subsystem, ...subsystems], { router: queue.router });
+   * ```
    * @param {Kernel} kernel The kernel that will route through it.
    * @returns {PacketRouter} The router.
    */

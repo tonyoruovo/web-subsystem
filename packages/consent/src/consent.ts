@@ -113,9 +113,23 @@ export const DEFAULT_CATEGORIES: readonly string[] = [
  * @public
  */
 export interface ConsentRecord {
+  /**
+   * @summary The category of the decision, for example `analytics`.
+   */
   readonly category: string;
+  /**
+   * @summary Tells if the user granted the category.
+   */
   readonly granted: boolean;
+  /**
+   * @summary The time of the decision, in Unix milliseconds.
+   * @description When two tabs disagree, the newer decision wins.
+   */
   readonly timestamp: number;
+  /**
+   * @summary The policy version under which the user decided.
+   * @description A decision under another version does not count.
+   */
   readonly policyVersion: number;
 }
 
@@ -149,8 +163,21 @@ export type ConsentChange = ConsentRecord;
  * @public
  */
 export interface ConsentOptions {
+  /**
+   * @summary The current version of the policy.
+   * @description The default is 1. Increase it when the policy changes: the
+   * earlier decisions stop counting, and `pending` lists all categories again.
+   */
   readonly policyVersion?: number;
+  /**
+   * @summary The categories that the user can decide on.
+   * @description The default is {@linkcode DEFAULT_CATEGORIES}. The list must include `necessary`.
+   */
   readonly categories?: readonly string[];
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
 }
 
@@ -176,8 +203,18 @@ export interface ConsentOptions {
  * @public
  */
 export interface ConsentData {
+  /**
+   * @summary The current version of the policy.
+   */
   policyVersion: number;
+  /**
+   * @summary The categories that the user can decide on.
+   */
   categories: string[];
+  /**
+   * @summary The last decision for each category.
+   * @description The kernel persists this key. `necessary` is never in it.
+   */
   records: Record<string, ConsentRecord>;
 }
 
@@ -210,17 +247,100 @@ export interface ConsentData {
  * @public
  */
 export interface ConsentControl {
+  /**
+   * @summary The commands of Consent.
+   */
   readonly commands: {
+    /**
+     * @summary Tells if a category is granted now.
+     * @description `necessary` is always granted. Other categories need a grant
+     * under the current policy version. An unknown category is not granted.
+     * @example
+     * Gating analytics
+     * ```ts
+     * if (commands.isGranted('analytics')) track(event);
+     * ```
+     * @param {string} category The category.
+     * @returns {boolean} `true` when the category is granted.
+     */
     isGranted(category: string): boolean;
+    /**
+     * @summary Grants one category.
+     * @description Consent records the decision and broadcasts `consent:changed` when the gate changes.
+     * @example
+     * A switch in the settings page
+     * ```ts
+     * analyticsSwitch.onchange = () => commands.grant('analytics');
+     * ```
+     * @param {string} category The category.
+     * @returns {boolean} `true` when the gate changed.
+     * @throws {RangeError} For a category that is not in `categories`.
+     */
     grant(category: string): boolean;
+    /**
+     * @summary Revokes one category.
+     * @description Revoking `necessary` has no effect.
+     * @example
+     * Turning marketing off
+     * ```ts
+     * commands.revoke('marketing');
+     * ```
+     * @param {string} category The category.
+     * @returns {boolean} `true` when the gate changed.
+     * @throws {RangeError} For a category that is not in `categories`.
+     */
     revoke(category: string): boolean;
+    /**
+     * @summary Records several decisions with one broadcast.
+     * @description An explicit "no" for an undecided category is recorded but
+     * not broadcast, because the gate does not change.
+     * @example
+     * The "save" button of a consent banner
+     * ```ts
+     * save.onclick = () => commands.set({ analytics: analyticsBox.checked, marketing: false });
+     * ```
+     * @param {Readonly<Record<string, boolean>>} decisions The decision for each category.
+     * @returns {ConsentChange[]} The changes of the gate.
+     * @throws {RangeError} For a category that is not in `categories`.
+     */
     set(decisions: Readonly<Record<string, boolean>>): ConsentChange[];
+    /**
+     * @summary Grants all categories.
+     * @example
+     * The "accept all" button
+     * ```ts
+     * acceptAll.onclick = () => commands.grantAll();
+     * ```
+     * @returns {ConsentChange[]} The changes of the gate.
+     */
     grantAll(): ConsentChange[];
+    /**
+     * @summary Revokes all categories. `necessary` stays granted.
+     * @example
+     * The "reject all" button
+     * ```ts
+     * rejectAll.onclick = () => commands.revokeAll();
+     * ```
+     * @returns {ConsentChange[]} The changes of the gate.
+     */
     revokeAll(): ConsentChange[];
   };
+  /**
+   * @summary The views of Consent.
+   */
   readonly views: {
+    /**
+     * @summary The state of Consent: the policy version, the categories and the records.
+     */
     readonly state: View<Partial<ConsentData>>;
+    /**
+     * @summary The current gate of each category: `true` when it is granted.
+     */
     readonly grants: View<Readonly<Record<string, boolean>>>;
+    /**
+     * @summary The categories to ask the user about.
+     * @description A category is pending when it has no decision under the current policy version.
+     */
     readonly pending: View<readonly string[]>;
   };
 }

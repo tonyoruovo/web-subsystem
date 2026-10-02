@@ -77,7 +77,15 @@ export const REDACTED = '[REDACTED]';
  * @public
  */
 export interface SanitizeOptions {
+  /**
+   * @summary The key fragments to treat as sensitive.
+   * @description The match ignores case and looks anywhere in the key. The default is {@linkcode DEFAULT_SENSITIVE_PATTERNS}.
+   */
   readonly patterns?: readonly string[];
+  /**
+   * @summary The depth up to which nested objects are copied.
+   * @description Deeper objects become `[Truncated]`. The default is 6.
+   */
   readonly maxDepth?: number;
 }
 

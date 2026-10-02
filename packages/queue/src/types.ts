@@ -81,17 +81,49 @@ export const QUEUE_ID = 'queue';
  * @public
  */
 export interface AdmissionControl {
+  /**
+   * @summary The admission commands that the Queue calls.
+   */
   readonly commands: {
+    /**
+     * @summary Tells if the platform accepts a packet of this importance now.
+     * @param {Importance} importance The importance of the packet.
+     * @returns {boolean} `true` when the packet is accepted.
+     */
     canAccept(importance: Importance): boolean;
+    /**
+     * @summary Records a packet as work in progress.
+     * @param {object} work The `id`, `subsystemId`, `importance` and optional `label` of the work.
+     * @returns {boolean} `true` when the work is recorded.
+     */
     beginWork(work: {
+      /**
+       * @summary The id of the work: the `messageId` of the packet.
+       */
       readonly id: string;
+      /**
+       * @summary The id of the subsystem that sent the packet.
+       */
       readonly subsystemId: string;
+      /**
+       * @summary The importance of the packet.
+       */
       readonly importance: Importance;
+      /**
+       * @summary A short text for the user: the event id of the packet.
+       */
       readonly label?: string;
     }): boolean;
+    /**
+     * @summary Removes a packet from the work in progress.
+     * @param {string} id The `messageId` of the packet.
+     */
     endWork(id: string): void;
   };
-  /** Not used by the Queue; present because every control interface has views. */
+  /**
+   * @summary The views of the control interface.
+   * @description The Queue does not use them. They are here because every control interface has views.
+   */
   readonly views: Readonly<Record<string, View<unknown>>>;
 }
 
@@ -101,6 +133,10 @@ export interface AdmissionControl {
  * @public
  */
 export interface FanOutOptions {
+  /**
+   * @summary Marks a broadcast that came from another tab.
+   * @description The default is `false`.
+   */
   readonly remote?: boolean;
 }
 
@@ -146,18 +182,70 @@ export type FanOut = (
  * @public
  */
 export interface QueueOptions {
+  /**
+   * @summary Where broadcasts go: the `fanOut` of the Notification Center.
+   * @description Without it, the Queue uses the direct broadcast of the kernel.
+   */
   readonly fanOut?: FanOut;
+  /**
+   * @summary The number of retries for a packet whose target does not run.
+   * @description The default is 3. After the last retry, the packet becomes a dead letter.
+   */
   readonly maxRetries?: number;
+  /**
+   * @summary The first wait before a retry, in milliseconds.
+   * @description The default is 100.
+   */
   readonly retryBaseMs?: number;
+  /**
+   * @summary The backoff formula for retries.
+   * @description The default is `exponential-jitter`.
+   */
   readonly retryStrategy?: BackoffStrategy;
+  /**
+   * @summary The number of waiting packets above which the Queue refuses new ones.
+   * @description The default is 1000. `CRITICAL` packets are never refused for depth.
+   */
   readonly maxDepth?: number;
+  /**
+   * @summary The number of packets that the Queue delivers at the same time.
+   * @description The default is 8.
+   */
   readonly maxActive?: number;
+  /**
+   * @summary The number of dead letters that the Queue keeps and buffers.
+   * @description The default is 100.
+   */
   readonly deadLetterCapacity?: number;
+  /**
+   * @summary The number of settled packets that the `trails` view keeps.
+   * @description The default is 50.
+   */
   readonly trailHistory?: number;
+  /**
+   * @summary Runs the non-critical deliveries.
+   * @description The default is a scheduler from `createScheduler`.
+   */
   readonly scheduler?: Scheduler;
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
+  /**
+   * @summary The source of random numbers for the backoff jitter.
+   * @description The default uses `crypto.getRandomValues`.
+   */
   readonly random?: () => number;
+  /**
+   * @summary Makes the span ids of envelopes from other tabs.
+   * @description The default is `crypto.randomUUID`.
+   */
   readonly ids?: () => string;
+  /**
+   * @summary The number of message ids that the Queue remembers to drop repeats from other tabs.
+   * @description The default is 1000.
+   */
   readonly dedupeCapacity?: number;
 }
 
@@ -195,14 +283,24 @@ export type RejectionReason = 'scope' | 'admission' | 'overflow' | 'stopped';
  * @public
  */
 export class QueueRejectedError extends Error {
+  /**
+   * @summary The name of the error class: `'QueueRejectedError'`.
+   */
   override readonly name = 'QueueRejectedError';
 
   /**
-   * @param {RejectionReason} reason Why.
-   * @param {string} messageId The refused packet.
+   * @summary Creates the error for one refused packet.
+   * @param {RejectionReason} reason The reason.
+   * @param {string} messageId The id of the refused packet.
    */
   constructor(
+    /**
+     * @summary Why the Queue refused the packet.
+     */
     readonly reason: RejectionReason,
+    /**
+     * @summary The id of the refused packet.
+     */
     readonly messageId: string,
   ) {
     super(`Packet ${messageId} refused by the Queue: ${reason}.`);
@@ -235,9 +333,23 @@ export class QueueRejectedError extends Error {
  * @public
  */
 export interface DeadLetter {
+  /**
+   * @summary The packet, with its fingerprint trail.
+   */
   readonly envelope: PacketEnvelope;
+  /**
+   * @summary Why the Queue gave the packet up.
+   * @description `undeliverable` means that the target did not run after the
+   * last retry, or was destroyed. `expired` means that the time to live passed.
+   */
   readonly reason: 'undeliverable' | 'expired';
+  /**
+   * @summary The number of deliveries that the Queue tried.
+   */
   readonly attempts: number;
+  /**
+   * @summary The time when the Queue gave the packet up, in Unix milliseconds.
+   */
   readonly failedAt: number;
 }
 
@@ -265,13 +377,39 @@ export interface DeadLetter {
  * @public
  */
 export interface SettledPacket {
+  /**
+   * @summary The id of the packet.
+   */
   readonly messageId: string;
+  /**
+   * @summary The id of the trace of the packet.
+   */
   readonly traceId: string;
+  /**
+   * @summary The id of the event.
+   */
   readonly eventId: string;
+  /**
+   * @summary The id of the subsystem that sent the packet.
+   */
   readonly source: string;
+  /**
+   * @summary The id of the target, or `null` for a broadcast.
+   */
   readonly target: string | null;
+  /**
+   * @summary The result of the packet.
+   * @description `failed` means that the target or a subscriber refused it.
+   * `rejected` means that the Queue refused it before delivery.
+   */
   readonly outcome: 'completed' | 'failed' | 'dead-lettered' | 'rejected';
+  /**
+   * @summary Why the packet did not complete, or `null`.
+   */
   readonly reason: string | null;
+  /**
+   * @summary The full fingerprint trail of the packet.
+   */
   readonly trail: FingerprintTrail;
 }
 
@@ -293,18 +431,37 @@ export interface SettledPacket {
  * @public
  */
 export interface QueueData {
-  /** Packets waiting (including those waiting to retry). */
+  /**
+   * @summary The number of waiting packets, including the packets that wait to retry.
+   */
   depth: number;
-  /** Packets being delivered. */
+  /**
+   * @summary The number of packets that the Queue delivers now.
+   */
   inFlight: number;
-  /** Packets waiting to retry. */
+  /**
+   * @summary The number of packets that wait to retry.
+   */
   retrying: number;
-  /** Dead letters kept in memory. */
+  /**
+   * @summary The number of dead letters in memory.
+   */
   deadLetters: number;
+  /**
+   * @summary The number of packets that completed.
+   */
   completed: number;
+  /**
+   * @summary The number of packets that the target or a subscriber refused.
+   */
   failed: number;
+  /**
+   * @summary The number of packets that the Queue refused.
+   */
   rejected: number;
-  /** Envelopes from other tabs dropped as repeats. */
+  /**
+   * @summary The number of envelopes from other tabs that the Queue dropped as repeats.
+   */
   duplicates: number;
 }
 
@@ -337,16 +494,89 @@ export interface QueueData {
  * @public
  */
 export interface QueueControl {
+  /**
+   * @summary The commands of the Queue.
+   */
   readonly commands: {
+    /**
+     * @summary Sends a dead letter again.
+     * @description The Queue removes the letter, drops its time to live, and
+     * routes it again. The result shows in `trails`, and in `deadLetters` if it fails again.
+     * @example
+     * Replaying all dead letters after an outage
+     * ```ts
+     * for (const letter of views.deadLetters.getSnapshot()) commands.replay(letter.envelope.metadata.messageId);
+     * ```
+     * @param {string} messageId The id of the dead letter.
+     * @returns {boolean} `true` when the letter was found and sent again.
+     */
     replay(messageId: string): boolean;
+    /**
+     * @summary Sends the buffered and the future dead letters to a sink.
+     * @description Storage binds a sink from M6. If the sink throws while the
+     * buffer drains, the Queue goes back to buffering and the promise rejects.
+     * @example
+     * Persisting dead letters
+     * ```ts
+     * await commands.bindDeadLetterSink((letter) => storage.commands.append('dead-letters', letter));
+     * ```
+     * @param {(letter: DeadLetter) => void | Promise<void>} sink Receives each dead letter.
+     * @returns {Promise<void>} Resolves after the buffer drains.
+     */
     bindDeadLetterSink(sink: (letter: DeadLetter) => void | Promise<void>): Promise<void>;
+    /**
+     * @summary Stops the sink. New dead letters go to the buffer again.
+     * @example
+     * Unbinding when Storage stops
+     * ```ts
+     * commands.unbindDeadLetterSink();
+     * ```
+     */
     unbindDeadLetterSink(): void;
+    /**
+     * @summary Calls an observer with each settled packet.
+     * @description The `trails` view keeps only the last packets. Use this
+     * command to see each packet, as the Logger does.
+     * @example
+     * Archiving every settled packet
+     * ```ts
+     * const stop = commands.observe((settled) => archive(settled));
+     * ```
+     * @param {(settled: SettledPacket) => void} observer Called with each settled packet.
+     * @returns {() => void} Stops the observer.
+     */
     observe(observer: (settled: SettledPacket) => void): () => void;
+    /**
+     * @summary Admits a Window or Global broadcast from another tab.
+     * @description The Queue drops a repeat, starts a new span on the same
+     * trace, and fans the broadcast out in remote mode. The Window transport calls it.
+     * @example
+     * Handing envelopes from the hub to the Queue
+     * ```ts
+     * client.onEnvelope((envelope) => void commands.ingest(envelope));
+     * ```
+     * @param {PacketEnvelope} envelope The envelope from the other tab.
+     * @returns {Promise<boolean>} `true` after the fan-out, `false` for a repeat.
+     * @throws {QueueRejectedError} For a request or a Page or Tab broadcast (`scope`), or when the Queue refuses it.
+     */
     ingest(envelope: PacketEnvelope): Promise<boolean>;
   };
+  /**
+   * @summary The views of the Queue.
+   */
   readonly views: {
+    /**
+     * @summary The counters of the Queue.
+     */
     readonly state: View<Partial<QueueData>>;
+    /**
+     * @summary The last settled packets, oldest first.
+     * @description The view keeps `trailHistory` packets.
+     */
     readonly trails: View<readonly SettledPacket[]>;
+    /**
+     * @summary The dead letters in memory, oldest first.
+     */
     readonly deadLetters: View<readonly DeadLetter[]>;
   };
 }

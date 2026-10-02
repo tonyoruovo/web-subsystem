@@ -14,6 +14,8 @@
 5. **Every package is documented when it is created.**
    - The package has a `README.md` covering its purpose, installation and peer dependencies, entry points, and usage with examples.
    - The code follows the JSDoc conventions: every file, including barrel (`index.ts`) files, opens with a `@fileoverview`. Every declaration (functions, classes, interfaces, type aliases and constants) has a `@summary`, a `@description`, examples where non-trivial, and the relevant `@template`, `@param`, `@returns`, `@throws` and access tags.
+   - Every public member has its own TSDoc block. This applies to the properties, methods, accessors and constructors of classes, to constructor parameter properties, and to the members of interfaces and nested object types. A description on the parent does not count. Each block has a `@summary`. A method block also has its `@param`, `@returns` and `@throws` tags, and an `@example` when the use is not obvious. `pnpm check:docs` finds the members that do not follow this rule (decided 2026-10-02).
+   - All prose follows ASD-STE100 Simplified Technical English: documentation, READMEs, TSDoc, commit messages and error messages (decided 2026-10-02).
 
 ---
 

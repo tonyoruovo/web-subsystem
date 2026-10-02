@@ -86,8 +86,34 @@ import { DEFAULT_CHANNEL, isWindowBroadcast, readPartitionId } from './shared';
  * @public
  */
 export interface WindowRelay {
+  /**
+   * @summary Sends a Window broadcast to the other connections of the same window.
+   * @description It must not throw for a transport failure.
+   * @example
+   * What the client calls
+   * ```ts
+   * relay.publish(windowId, envelope);
+   * ```
+   * @param {string} windowId The window id of this browser session.
+   * @param {PacketEnvelope} envelope The broadcast.
+   */
   publish(windowId: string, envelope: PacketEnvelope): void;
+  /**
+   * @summary Receives the Window broadcasts that other connections of the same window send.
+   * @example
+   * What the client calls
+   * ```ts
+   * const stop = relay.subscribe(windowId, onEnvelope);
+   * ```
+   * @param {string} windowId The window id of this browser session.
+   * @param {(envelope: PacketEnvelope) => void} listener Called with each broadcast.
+   * @returns {() => void} Stops the listener.
+   */
   subscribe(windowId: string, listener: (envelope: PacketEnvelope) => void): () => void;
+  /**
+   * @summary Tells if the relay can reach the server now, as a view.
+   * @description The client counts a connected relay as `site` reach.
+   */
   readonly connected: View<boolean>;
 }
 
@@ -126,11 +152,33 @@ export type WindowReach = 'site' | 'origin' | 'unknown';
  * @public
  */
 export interface WindowStatus {
+  /**
+   * @summary How the client reaches the other tabs: `iframe`, `direct` or `single-origin`.
+   */
   readonly mode: WindowMode;
+  /**
+   * @summary The state of the link to the hub.
+   * @description `idle` before `connect`, and `closed` after `close`.
+   */
   readonly connection: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'closed';
+  /**
+   * @summary Tells if all framed copies of the hub share one partition.
+   * @description It stays `unknown` until a tab on another origin connects.
+   */
   readonly hub: HubPartition;
+  /**
+   * @summary The state of the relay, or `none` without a relay.
+   */
   readonly relay: 'none' | 'connected' | 'disconnected';
+  /**
+   * @summary The tabs that a Window broadcast reaches.
+   * @description `site` means all tabs of the site. `origin` means the tabs of this origin only.
+   */
   readonly reach: WindowReach;
+  /**
+   * @summary The window id of this browser session, or `null` before the first connection.
+   * @description A single-origin app has no window id.
+   */
   readonly windowId: string | null;
 }
 
@@ -160,16 +208,59 @@ export interface WindowStatus {
  * @public
  */
 export interface WindowClientOptions {
+  /**
+   * @summary The URL of the hub page on the apex.
+   * @description Leave it out for a single-origin app.
+   */
   readonly hubUrl?: string;
+  /**
+   * @summary The name of the `BroadcastChannel`.
+   * @description The default is `__platform_window`. It must match the name in `renderHubPage`.
+   */
   readonly channel?: string;
+  /**
+   * @summary The relay for browsers that partition the hub.
+   * @description The Global transport gives one from M8.
+   */
   readonly relay?: WindowRelay;
+  /**
+   * @summary The time between two pings of the hub, in milliseconds.
+   * @description The default is 10000.
+   */
   readonly heartbeatMs?: number;
+  /**
+   * @summary The longest time to wait for `welcome` and for each `pong`, in milliseconds.
+   * @description The default is 5000.
+   */
   readonly timeoutMs?: number;
+  /**
+   * @summary The first wait before a reconnection, in milliseconds.
+   * @description The default is 500. The wait grows with each failure, up to 30 seconds.
+   */
   readonly retryBaseMs?: number;
+  /**
+   * @summary The number of broadcasts that the client holds while it connects.
+   * @description The default is 100. When the buffer is full, the oldest broadcast is dropped.
+   */
   readonly bufferSize?: number;
+  /**
+   * @summary The origin of this tab.
+   * @description The default is `location.origin`. Tests give a value.
+   */
   readonly origin?: string;
+  /**
+   * @summary The cookie jar.
+   * @description The default uses `document.cookie`. Tests give an in-memory jar.
+   */
   readonly cookies?: CookieJar;
+  /**
+   * @summary The link to the hub.
+   * @description The default follows the mode. Tests give a fake link.
+   */
   readonly link?: HubLink;
+  /**
+   * @summary The source of random numbers for the backoff jitter.
+   */
   readonly random?: () => number;
 }
 
@@ -200,10 +291,57 @@ export interface WindowClientOptions {
  * @public
  */
 export interface WindowClient {
+  /**
+   * @summary The status of the client, as a view.
+   */
   readonly status: View<WindowStatus>;
+  /**
+   * @summary Opens the link to the hub.
+   * @description After a failure, the client also reconnects with backoff.
+   * Broadcasts in the buffer go out after the connection.
+   * @example
+   * Connecting at startup
+   * ```ts
+   * await client.connect();
+   * ```
+   * @returns {Promise<void>} Resolves when the link is open.
+   * @throws {HubUnavailableError} When the hub does not answer in time.
+   * @throws {Error} When the client is closed.
+   */
   connect(): Promise<void>;
+  /**
+   * @summary Sends a Window broadcast from this tab to the other tabs.
+   * @description The client sends through the hub, and also through the relay
+   * while the hub is not known to be shared. While it connects, it buffers the broadcast.
+   * @example
+   * Sending a broadcast by hand
+   * ```ts
+   * client.publish(envelope);
+   * ```
+   * @param {PacketEnvelope} envelope A Window-scope broadcast.
+   * @throws {TypeError} When the envelope is not a Window-scope broadcast.
+   */
   publish(envelope: PacketEnvelope): void;
+  /**
+   * @summary Receives the broadcasts of the other tabs, one time each.
+   * @example
+   * Handing them to the Queue
+   * ```ts
+   * client.onEnvelope((envelope) => void queue.commands.ingest(envelope));
+   * ```
+   * @param {(envelope: PacketEnvelope) => void} listener Called with each broadcast.
+   * @returns {() => void} Stops the listener.
+   */
   onEnvelope(listener: (envelope: PacketEnvelope) => void): () => void;
+  /**
+   * @summary Disconnects for good.
+   * @description The client stops its timers, removes the link and drops the buffer. `connect` then throws.
+   * @example
+   * Closing at teardown
+   * ```ts
+   * return () => client.close();
+   * ```
+   */
   close(): void;
 }
 

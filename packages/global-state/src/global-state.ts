@@ -86,10 +86,27 @@ export const GLOBAL_STATE_ID = 'global-state';
  * @public
  */
 export interface PendingWork {
+  /**
+   * @summary The id of the work.
+   * @description The Queue uses the `messageId` of the packet. `endWork` takes the same id.
+   */
   readonly id: string;
+  /**
+   * @summary The id of the subsystem that does the work.
+   */
   readonly subsystemId: string;
+  /**
+   * @summary The importance of the work.
+   */
   readonly importance: Importance;
+  /**
+   * @summary A short text for the user, for example `Upload`, or `null`.
+   * @description The Queue uses the event id of the packet.
+   */
   readonly label: string | null;
+  /**
+   * @summary The time when the work started, in Unix milliseconds.
+   */
   readonly startedAt: number;
 }
 
@@ -118,11 +135,31 @@ export interface PendingWork {
  * @public
  */
 export interface GlobalStateData {
+  /**
+   * @summary The status of the platform, derived from the units and the pending work.
+   * @description See {@linkcode derivePlatformStatus} for the rules.
+   */
   status: PlatformStatus;
+  /**
+   * @summary The id of this tab.
+   * @description The id survives a reload. A duplicated tab gets a new id.
+   */
   tabId: string;
+  /**
+   * @summary Tells if the device has a network connection.
+   */
   online: boolean;
+  /**
+   * @summary Tells if the page is visible.
+   */
   visible: boolean;
+  /**
+   * @summary The work that is in progress, oldest first.
+   */
   pending: PendingWork[];
+  /**
+   * @summary The number of units in each condition.
+   */
   units: UnitSummary;
 }
 
@@ -154,14 +191,62 @@ export interface GlobalStateData {
  * @public
  */
 export interface GlobalStateControl {
+  /**
+   * @summary The commands of Global State.
+   */
   readonly commands: {
+    /**
+     * @summary Tells if the platform accepts work of this importance now.
+     * @description `CRITICAL` work is always accepted. Nothing else is
+     * accepted while the platform is `BUSY`. `LOW` work is not accepted while
+     * the platform is `DEGRADED`.
+     * @example
+     * Postponing optional work
+     * ```ts
+     * if (!commands.canAccept('LOW')) postpone(task);
+     * ```
+     * @param {Importance} importance The importance of the work.
+     * @returns {boolean} `true` when the work is accepted.
+     */
     canAccept(importance: Importance): boolean;
+    /**
+     * @summary Records work that starts.
+     * @description The work stays in `pending` until `endWork`. Global State
+     * refuses work whose importance it does not accept now.
+     * @example
+     * Tracking an import
+     * ```ts
+     * if (commands.beginWork({ id: 'import', subsystemId: 'sync', importance: 'MEDIUM', label: 'Import' })) {
+     *   try { await importAll(); } finally { commands.endWork('import'); }
+     * }
+     * ```
+     * @param {object} work The `id`, `subsystemId`, `importance` and optional `label` of the work.
+     * @returns {boolean} `true` when the work is recorded, `false` when it is refused.
+     */
     beginWork(
       work: Omit<PendingWork, 'startedAt' | 'label'> & { readonly label?: string },
     ): boolean;
+    /**
+     * @summary Removes work that ended.
+     * @description An unknown id has no effect.
+     * @example
+     * Ending work in a `finally` block
+     * ```ts
+     * try { await upload(); } finally { commands.endWork('upload'); }
+     * ```
+     * @param {string} id The id that `beginWork` got.
+     */
     endWork(id: string): void;
   };
-  readonly views: { readonly state: View<Partial<GlobalStateData>> };
+  /**
+   * @summary The views of Global State.
+   */
+  readonly views: {
+    /**
+     * @summary The state of Global State: status, tab id, environment, pending work and units.
+     */
+    readonly state: View<Partial<GlobalStateData>>;
+  };
 }
 
 /**
@@ -188,9 +273,25 @@ export interface GlobalStateControl {
  * @public
  */
 export interface GlobalStateOptions {
+  /**
+   * @summary The number of pending works above which the platform is `BUSY`.
+   * @description The default is 50.
+   */
   readonly busyThreshold?: number;
+  /**
+   * @summary The source of the online and visibility states.
+   * @description The default is {@linkcode createBrowserEnvironment}. Tests use {@linkcode createStaticEnvironment}.
+   */
   readonly environment?: EnvironmentSource;
+  /**
+   * @summary The options of the tab identity, or `false` to use the fixed id `'tab'`.
+   * @description Use `false` in Node and in tests without `sessionStorage`.
+   */
   readonly tabIdentity?: TabIdentityOptions | false;
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
 }
 

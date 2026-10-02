@@ -98,14 +98,44 @@ export const LEVEL_RANK: Readonly<Record<LogLevel, number>> = {
  * @public
  */
 export interface LogEntry {
+  /**
+   * @summary The id of the entry, unique in the session, for example `log-7`.
+   */
   readonly id: string;
+  /**
+   * @summary The level of the entry.
+   */
   readonly level: LogLevel;
+  /**
+   * @summary The text of the entry.
+   */
   readonly message: string;
+  /**
+   * @summary The id of the subsystem that logged the entry.
+   * @description The default is `app`.
+   */
   readonly subsystemId: string;
+  /**
+   * @summary The feature that logged the entry, or `null`.
+   */
   readonly componentId: string | null;
+  /**
+   * @summary The time of the entry, in Unix milliseconds.
+   */
   readonly timestamp: number;
+  /**
+   * @summary The id of the session: one value for each run of the Logger.
+   */
   readonly sessionId: string;
+  /**
+   * @summary The id of the trace that the entry belongs to, or `null`.
+   * @description `trace(traceId)` returns the entry with the trails of the same trace.
+   */
   readonly traceId: string | null;
+  /**
+   * @summary The sanitized context of the entry, or `null`.
+   * @description The Logger removes the values of sensitive keys before it keeps the entry.
+   */
   readonly context: Readonly<Record<string, unknown>> | null;
 }
 
@@ -132,9 +162,25 @@ export interface LogEntry {
  * @public
  */
 export interface LogOptions {
+  /**
+   * @summary The id of the subsystem that logs.
+   * @description The default is `app`. The per-subsystem levels use this id.
+   */
   readonly subsystemId?: string;
+  /**
+   * @summary The feature that logs, or `null`.
+   * @description The default is `null`.
+   */
   readonly componentId?: string | null;
+  /**
+   * @summary Data that explains the entry.
+   * @description The Logger sanitizes a copy. The original object does not change.
+   */
   readonly context?: Readonly<Record<string, unknown>>;
+  /**
+   * @summary The id of the trace that the entry belongs to.
+   * @description In a `receive` handler, use `packet.header.metadata.traceId`.
+   */
   readonly traceId?: string;
 }
 
@@ -163,14 +209,42 @@ export interface LogOptions {
  * @public
  */
 export interface TraceRecord {
+  /**
+   * @summary Where the trail comes from.
+   * @description `packet` is a packet that the Queue settled. `broadcast` is a fan-out of the Notification Center.
+   */
   readonly kind: 'packet' | 'broadcast';
+  /**
+   * @summary The id of the packet.
+   */
   readonly messageId: string;
+  /**
+   * @summary The id of the trace of the packet.
+   */
   readonly traceId: string;
+  /**
+   * @summary The id of the event.
+   */
   readonly eventId: string;
+  /**
+   * @summary The id of the subsystem that sent the packet.
+   */
   readonly source: string;
+  /**
+   * @summary The result that the recorder gave, for example `completed` or `fanned-out`.
+   */
   readonly outcome: string;
+  /**
+   * @summary Why the packet did not complete, or `null`.
+   */
   readonly reason: string | null;
+  /**
+   * @summary The full fingerprint trail of the packet.
+   */
   readonly trail: FingerprintTrail;
+  /**
+   * @summary The time when the Logger got the record, in Unix milliseconds.
+   */
   readonly timestamp: number;
 }
 
@@ -192,8 +266,17 @@ export interface TraceRecord {
  * @public
  */
 export interface Trace {
+  /**
+   * @summary The id of the trace.
+   */
   readonly traceId: string;
+  /**
+   * @summary The trails of the trace, oldest first.
+   */
   readonly records: readonly TraceRecord[];
+  /**
+   * @summary The log entries of the trace, oldest first.
+   */
   readonly entries: readonly LogEntry[];
 }
 
@@ -220,12 +303,34 @@ export interface Trace {
  * @public
  */
 export interface LogQuery {
+  /**
+   * @summary Keeps the entries with one of these levels.
+   */
   readonly levels?: readonly LogLevel[];
+  /**
+   * @summary Keeps the entries from one of these subsystems.
+   */
   readonly subsystems?: readonly string[];
+  /**
+   * @summary Keeps the entries at or after this time, in Unix milliseconds.
+   */
   readonly since?: number;
+  /**
+   * @summary Keeps the entries at or before this time, in Unix milliseconds.
+   */
   readonly until?: number;
+  /**
+   * @summary Keeps the entries of one trace.
+   */
   readonly traceId?: string;
+  /**
+   * @summary Keeps the entries whose message contains this text.
+   * @description The match ignores case.
+   */
   readonly text?: string;
+  /**
+   * @summary Keeps only the newest entries, up to this number.
+   */
   readonly limit?: number;
 }
 
@@ -235,16 +340,50 @@ export interface LogQuery {
  * @public
  */
 export interface ObservedPacket {
+  /**
+   * @summary The id of the packet.
+   */
   readonly messageId: string;
+  /**
+   * @summary The id of the trace of the packet.
+   */
   readonly traceId: string;
+  /**
+   * @summary The id of the event.
+   */
   readonly eventId: string;
+  /**
+   * @summary The id of the subsystem that sent the packet.
+   */
   readonly source: string;
+  /**
+   * @summary The result of the packet.
+   */
   readonly outcome: string;
+  /**
+   * @summary Why the packet did not complete, or `null`.
+   */
   readonly reason: string | null;
+  /**
+   * @summary The full fingerprint trail of the packet.
+   */
   readonly trail: FingerprintTrail;
+  /**
+   * @summary The deliveries of a broadcast.
+   * @description Only broadcast records have them.
+   */
   readonly deliveries?: readonly {
+    /**
+     * @summary The name of the subscriber.
+     */
     readonly subscriber: string;
+    /**
+     * @summary The result of the delivery: `delivered`, `failed` or `skipped`.
+     */
     readonly outcome: string;
+    /**
+     * @summary Why the delivery failed or was skipped, or `null`.
+     */
     readonly reason: string | null;
   }[];
 }
@@ -267,7 +406,15 @@ export interface ObservedPacket {
  * @public
  */
 export interface TrailSource extends ControlInterface {
+  /**
+   * @summary The commands that the Logger uses.
+   */
   readonly commands: {
+    /**
+     * @summary Calls an observer with each settled packet or broadcast record.
+     * @param {(packet: ObservedPacket) => void} observer Called with each record.
+     * @returns {() => void} Stops the observer.
+     */
     observe(observer: (packet: ObservedPacket) => void): () => void;
   };
 }
@@ -298,13 +445,44 @@ export interface TrailSource extends ControlInterface {
  * @public
  */
 export interface LoggerOptions {
+  /**
+   * @summary The global level until `setLevel` changes it.
+   * @description The default is `INFO`. A change with `setLevel` is persisted and wins over this option.
+   */
   readonly minLevel?: LogLevel;
+  /**
+   * @summary The number of entries that the Logger keeps.
+   * @description The default is 1000.
+   */
   readonly maxEntries?: number;
+  /**
+   * @summary The number of trace records that the Logger keeps.
+   * @description The default is 200.
+   */
   readonly maxTraces?: number;
+  /**
+   * @summary The number of entries that the Logger buffers until a sink is bound.
+   * @description The default is 500.
+   */
   readonly sinkCapacity?: number;
+  /**
+   * @summary Writes the entries at or above this level to the console as well.
+   * @description The default is `false`: no console output.
+   */
   readonly console?: LogLevel | false;
+  /**
+   * @summary Extra sensitive patterns, or another depth, for the sanitizer.
+   */
   readonly sanitize?: SanitizeOptions;
+  /**
+   * @summary The id of the session.
+   * @description The default is `crypto.randomUUID()`.
+   */
   readonly sessionId?: string;
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
 }
 
@@ -332,12 +510,36 @@ export interface LoggerOptions {
  * @public
  */
 export interface LoggerData {
+  /**
+   * @summary The global level.
+   * @description The kernel persists this key.
+   */
   minLevel: LogLevel;
+  /**
+   * @summary The level of each subsystem that has its own level.
+   * @description The kernel persists this key.
+   */
   levels: Record<string, LogLevel>;
+  /**
+   * @summary The id of the session.
+   */
   sessionId: string;
+  /**
+   * @summary The number of entries in the ring.
+   */
   entries: number;
+  /**
+   * @summary The number of trace records in the ring.
+   */
   traces: number;
+  /**
+   * @summary The number of entries that the ring removed because it was full.
+   */
   dropped: number;
+  /**
+   * @summary Tells if a sink receives the entries.
+   * @description When it is `false`, the Logger buffers the entries.
+   */
   sinkBound: boolean;
 }
 
@@ -371,22 +573,154 @@ export interface LoggerData {
  * @public
  */
 export interface LoggerControl {
+  /**
+   * @summary The commands of the Logger.
+   */
   readonly commands: {
+    /**
+     * @summary Keeps a log entry.
+     * @description The Logger drops the entry when its level is below the
+     * threshold. It sanitizes the context, then writes the entry to the ring, the
+     * console mirror and the sink.
+     * @example
+     * Logging from a feature
+     * ```ts
+     * commands.log('WARN', 'Quota low', { subsystemId: 'storage', componentId: 'idb', context: { used } });
+     * ```
+     * @param {LogLevel} level The level of the entry.
+     * @param {string} message The text of the entry.
+     * @param {LogOptions} [options] The subsystem, feature, context and trace of the entry.
+     * @returns {LogEntry | null} The entry, or `null` when the level filtered it out.
+     */
     log(level: LogLevel, message: string, options?: LogOptions): LogEntry | null;
+    /**
+     * @summary Tells if `log` keeps an entry of this level from this subsystem.
+     * @description Use it to skip building a costly context.
+     * @example
+     * Building context only when needed
+     * ```ts
+     * if (commands.isEnabled('DEBUG', 'sync')) commands.log('DEBUG', 'State', { subsystemId: 'sync', context: dump() });
+     * ```
+     * @param {LogLevel} level The level.
+     * @param {string} [subsystemId] The id of the subsystem. The default is `app`.
+     * @returns {boolean} `true` when the entry is kept.
+     */
     isEnabled(level: LogLevel, subsystemId?: string): boolean;
+    /**
+     * @summary Sets the global level, or the level of one subsystem.
+     * @description The kernel persists the levels.
+     * @example
+     * Quieter logs, except for Sync
+     * ```ts
+     * commands.setLevel('WARN');
+     * commands.setLevel('DEBUG', 'sync');
+     * ```
+     * @param {LogLevel} level The new level.
+     * @param {string} [subsystemId] The subsystem. Without it, the global level changes.
+     */
     setLevel(level: LogLevel, subsystemId?: string): void;
+    /**
+     * @summary Removes the level of one subsystem, so it uses the global level again.
+     * @example
+     * Ending a debug session
+     * ```ts
+     * commands.resetLevel('sync');
+     * ```
+     * @param {string} subsystemId The subsystem.
+     */
     resetLevel(subsystemId: string): void;
+    /**
+     * @summary Returns the entries that match the criteria, oldest first.
+     * @example
+     * The last errors from Storage
+     * ```ts
+     * commands.query({ levels: ['ERROR', 'FATAL'], subsystems: ['storage'], limit: 20 });
+     * ```
+     * @param {LogQuery} [criteria] The criteria. Without them, all entries match.
+     * @returns {LogEntry[]} The matching entries.
+     */
     query(criteria?: LogQuery): LogEntry[];
+    /**
+     * @summary Returns the trails and the entries of one trace.
+     * @example
+     * Following a user action
+     * ```ts
+     * const { records, entries } = commands.trace(traceId);
+     * ```
+     * @param {string} traceId The id of the trace.
+     * @returns {Trace} The trails and the entries, oldest first.
+     */
     trace(traceId: string): Trace;
+    /**
+     * @summary Returns the matching entries as JSON or as text.
+     * @description The text format has one line for each entry (see {@linkcode formatEntry}).
+     * @example
+     * A diagnostic bundle of the last 10 minutes
+     * ```ts
+     * const text = commands.export('text', { since: Date.now() - 600_000 });
+     * ```
+     * @param {'json' | 'text'} format The format.
+     * @param {LogQuery} [criteria] The criteria. Without them, all entries are exported.
+     * @returns {string} The export.
+     */
     export(format: 'json' | 'text', criteria?: LogQuery): string;
+    /**
+     * @summary Adds a trail from another tab or a server, to join it by `traceId`.
+     * @example
+     * Adding a trail that a server sent
+     * ```ts
+     * commands.recordTrail({ kind: 'packet', ...serverTrail });
+     * ```
+     * @param {Omit<TraceRecord, 'timestamp'>} record The trail. The Logger sets the time.
+     */
     recordTrail(record: Omit<TraceRecord, 'timestamp'>): void;
+    /**
+     * @summary Removes all entries and all trace records.
+     * @example
+     * Clearing the log after an export
+     * ```ts
+     * commands.clear();
+     * ```
+     */
     clear(): void;
+    /**
+     * @summary Sends the buffered and the future entries to a sink.
+     * @description Storage binds a sink from M6. If the sink throws while the
+     * buffer drains, the Logger goes back to buffering and the promise rejects.
+     * @example
+     * Persisting the log
+     * ```ts
+     * await commands.bindSink((entry) => storage.commands.append('logs', entry));
+     * ```
+     * @param {(entry: LogEntry) => void | Promise<void>} sink Receives each entry.
+     * @returns {Promise<void>} Resolves after the buffer drains.
+     */
     bindSink(sink: (entry: LogEntry) => void | Promise<void>): Promise<void>;
+    /**
+     * @summary Stops the sink. New entries go to the buffer again.
+     * @example
+     * Unbinding when Storage stops
+     * ```ts
+     * commands.unbindSink();
+     * ```
+     */
     unbindSink(): void;
   };
+  /**
+   * @summary The views of the Logger.
+   */
   readonly views: {
+    /**
+     * @summary The state of the Logger: levels, session and counters.
+     */
     readonly state: View<Partial<LoggerData>>;
+    /**
+     * @summary The entries in the ring, oldest first.
+     */
     readonly entries: View<readonly LogEntry[]>;
+    /**
+     * @summary The trace records in the ring, oldest first.
+     */
     readonly traces: View<readonly TraceRecord[]>;
   };
 }

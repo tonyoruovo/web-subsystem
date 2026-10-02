@@ -98,11 +98,25 @@ export const NOTIFICATION_ID = 'notification';
  * @public
  */
 export interface EventDefinition {
+  /**
+   * @summary The id of the event, for example `auth:login`.
+   */
   readonly eventId: string;
+  /**
+   * @summary A text that tells what the event means.
+   */
   readonly description?: string;
-  /** Subsystems allowed to broadcast the event. Absent: anyone. */
+  /**
+   * @summary The ids of the subsystems that can broadcast the event.
+   * @description Without the list, any subsystem can broadcast it. A
+   * broadcast from another subsystem fails with {@linkcode BroadcastRejectedError}.
+   */
   readonly publishers?: readonly string[];
-  /** Subscribers allowed to receive the event. Absent: anyone. */
+  /**
+   * @summary The names of the subscribers that can receive the event.
+   * @description Without the list, any subscriber receives it. A name is a
+   * subsystem id or the `subscriber` of a programmatic subscription.
+   */
   readonly subscribers?: readonly string[];
 }
 
@@ -137,9 +151,25 @@ export type EventListener = (payload: unknown, header: PacketHeader) => void | P
  * @public
  */
 export interface SubscriptionOptions {
+  /**
+   * @summary The name of the subscriber, for access control and history.
+   * @description The default is `'app'`.
+   */
   readonly subscriber?: string;
+  /**
+   * @summary The delivery order: a higher priority receives the broadcast first.
+   * @description The default is 0, the same as subsystem subscribers.
+   */
   readonly priority?: number;
+  /**
+   * @summary Skips the payloads for which it returns `false`.
+   * @description A skipped delivery shows as `skipped` with the reason `filtered`.
+   */
   readonly filter?: (payload: unknown) => boolean;
+  /**
+   * @summary The number of deliveries after which the subscription removes itself.
+   * @description Without it, the subscription stays until you call its unsubscribe function.
+   */
   readonly maxExecutions?: number;
 }
 
@@ -161,8 +191,19 @@ export interface SubscriptionOptions {
  * @public
  */
 export interface DeliveryRecord {
+  /**
+   * @summary The name of the subscriber: a subsystem id or a subscription name.
+   */
   readonly subscriber: string;
+  /**
+   * @summary The result of the delivery.
+   * @description `failed` means that the subscriber threw. `skipped` means
+   * that its circuit was open or its filter refused the payload.
+   */
   readonly outcome: 'delivered' | 'failed' | 'skipped';
+  /**
+   * @summary Why the delivery failed or was skipped, or `null` for a delivery.
+   */
   readonly reason: string | null;
 }
 
@@ -193,16 +234,52 @@ export interface DeliveryRecord {
  * @public
  */
 export interface BroadcastRecord {
+  /**
+   * @summary The id of the broadcast packet.
+   */
   readonly messageId: string;
+  /**
+   * @summary The id of the trace of the broadcast.
+   */
   readonly traceId: string;
+  /**
+   * @summary The id of the event.
+   */
   readonly eventId: string;
+  /**
+   * @summary The id of the subsystem that sent the broadcast.
+   */
   readonly source: string;
+  /**
+   * @summary The time of the fan-out, in Unix milliseconds.
+   */
   readonly timestamp: number;
+  /**
+   * @summary Tells if the broadcast came from another tab.
+   */
   readonly remote: boolean;
+  /**
+   * @summary The result of the broadcast: `fanned-out` or `rejected`.
+   * @description A failed delivery does not change the result. See `deliveries`.
+   */
   readonly outcome: 'fanned-out' | 'rejected';
+  /**
+   * @summary The scope relay that got the broadcast, or `null`.
+   */
   readonly relayed: Scope | null;
+  /**
+   * @summary Why the broadcast was rejected, or `null`.
+   */
   readonly reason: string | null;
+  /**
+   * @summary One record for each subscriber, in delivery order.
+   */
   readonly deliveries: readonly DeliveryRecord[];
+  /**
+   * @summary The full fingerprint trail of the broadcast.
+   * @description The trail has the entries of the sender, then `fanned-out`,
+   * one entry for each delivery, and `relayed` when a relay got it.
+   */
   readonly trail: FingerprintTrail;
 }
 
@@ -224,19 +301,33 @@ export interface BroadcastRecord {
  * @public
  */
 export interface NotificationData {
-  /** Registered events. */
+  /**
+   * @summary The number of registered events.
+   */
   events: number;
-  /** Programmatic subscriptions. */
+  /**
+   * @summary The number of programmatic subscriptions.
+   */
   subscriptions: number;
-  /** Broadcasts fanned out. */
+  /**
+   * @summary The number of broadcasts that the center fanned out.
+   */
   broadcasts: number;
-  /** Deliveries that succeeded. */
+  /**
+   * @summary The number of deliveries that succeeded.
+   */
   delivered: number;
-  /** Deliveries that threw. */
+  /**
+   * @summary The number of deliveries where the subscriber threw.
+   */
   failed: number;
-  /** Broadcasts refused. */
+  /**
+   * @summary The number of broadcasts that access control or strict mode refused.
+   */
   rejected: number;
-  /** Broadcasts sent on to a scope relay. */
+  /**
+   * @summary The number of broadcasts that went to a scope relay.
+   */
   relayed: number;
 }
 
@@ -269,14 +360,76 @@ export interface NotificationData {
  * @public
  */
 export interface NotificationControl {
+  /**
+   * @summary The commands of the Notification Center.
+   */
   readonly commands: {
+    /**
+     * @summary Adds an event definition, or replaces the one with the same id.
+     * @example
+     * Letting only Chat announce typing
+     * ```ts
+     * commands.registerEvent({ eventId: 'chat:typing', publishers: ['chat'] });
+     * ```
+     * @param {EventDefinition} definition The definition.
+     */
     registerEvent(definition: EventDefinition): void;
+    /**
+     * @summary Adds a programmatic subscription to an event.
+     * @description The listener gets a copy of the payload and the header of
+     * the packet. A listener that throws is recorded as `failed`.
+     * @example
+     * A subscription that ends with a component
+     * ```ts
+     * const stop = commands.subscribe('chat:typing', showTyping, { subscriber: 'ui' });
+     * onUnmounted(stop);
+     * ```
+     * @param {string} eventId The id of the event.
+     * @param {EventListener} listener Called for each broadcast of the event.
+     * @param {SubscriptionOptions} [options] The name, priority, filter and limit of the subscription.
+     * @returns {() => void} Removes the subscription.
+     */
     subscribe(eventId: string, listener: EventListener, options?: SubscriptionOptions): () => void;
+    /**
+     * @summary Calls an observer with each history record.
+     * @description The `history` view keeps only the last records. Use this
+     * command to see each record, as the Logger does.
+     * @example
+     * Archiving every broadcast
+     * ```ts
+     * const stop = commands.observe((record) => archive(record));
+     * ```
+     * @param {(record: BroadcastRecord) => void} observer Called with each new record.
+     * @returns {() => void} Stops the observer.
+     */
     observe(observer: (record: BroadcastRecord) => void): () => void;
+    /**
+     * @summary Attaches the scope relay for one scope.
+     * @description After the local fan-out, the center gives each broadcast of
+     * that scope that this tab sent to the relay. A new relay for the same scope
+     * replaces the old one.
+     * @example
+     * Attaching the Window client
+     * ```ts
+     * const detach = commands.attachRelay({ scope: 'window', publish: (e) => client.publish(e) });
+     * ```
+     * @param {ScopeRelay} relay The relay.
+     * @returns {() => void} Detaches the relay, if it is still the attached one.
+     */
     attachRelay(relay: ScopeRelay): () => void;
   };
+  /**
+   * @summary The views of the Notification Center.
+   */
   readonly views: {
+    /**
+     * @summary The counters of the Notification Center.
+     */
     readonly state: View<Partial<NotificationData>>;
+    /**
+     * @summary The last broadcasts, oldest first.
+     * @description The view keeps `historySize` records.
+     */
     readonly history: View<readonly BroadcastRecord[]>;
   };
 }
@@ -305,11 +458,34 @@ export interface NotificationControl {
  * @public
  */
 export interface NotificationOptions {
+  /**
+   * @summary The events to register at the start.
+   */
   readonly events?: readonly EventDefinition[];
+  /**
+   * @summary Refuses broadcasts of events that are not registered.
+   * @description The default is `false`.
+   */
   readonly strict?: boolean;
+  /**
+   * @summary The number of broadcasts that the history keeps.
+   * @description The default is 100.
+   */
   readonly historySize?: number;
+  /**
+   * @summary The number of failures in a row that opens the circuit of a subscriber.
+   * @description The default is 3.
+   */
   readonly failureThreshold?: number;
+  /**
+   * @summary The time that a circuit stays open, in milliseconds.
+   * @description The default is 30000. After it, the breaker lets one delivery through as a test.
+   */
   readonly resetTimeoutMs?: number;
+  /**
+   * @summary The clock, in Unix milliseconds.
+   * @description The default is `Date.now`.
+   */
   readonly now?: () => number;
 }
 
@@ -331,13 +507,20 @@ export interface NotificationOptions {
  * @public
  */
 export class BroadcastRejectedError extends Error {
+  /**
+   * @summary The name of the error class: `'BroadcastRejectedError'`.
+   */
   override readonly name = 'BroadcastRejectedError';
 
   /**
+   * @summary Creates the error for one refused broadcast.
    * @param {string} eventId The refused event.
-   * @param {string} reason Why.
+   * @param {string} reason The reason.
    */
   constructor(
+    /**
+     * @summary The id of the refused event.
+     */
     readonly eventId: string,
     reason: string,
   ) {
@@ -369,6 +552,11 @@ export class BroadcastRejectedError extends Error {
  * @public
  */
 export interface FanOutOptions {
+  /**
+   * @summary Marks a broadcast that came from another tab.
+   * @description The default is `false`. A remote broadcast reaches a
+   * subscriber with the id of the sender, and it does not go to a relay.
+   */
   readonly remote?: boolean;
 }
 
@@ -401,9 +589,19 @@ export interface FanOutOptions {
  * @public
  */
 export interface NotificationCenter {
+  /**
+   * @summary The subsystem to register with the kernel: id `notification`, centralized, Tab scope.
+   */
   readonly subsystem: SubsystemDefinition<NotificationData, NotificationControl>;
   /**
    * @summary Delivers one broadcast to every allowed subscriber.
+   * @description The Queue calls it for each broadcast. Give it to the Queue
+   * as the `fanOut` option.
+   * @example
+   * Wiring it to the Queue
+   * ```ts
+   * const queue = createQueue({ fanOut: notification.fanOut });
+   * ```
    * @param {Kernel} kernel The kernel, to reach subsystem subscribers.
    * @param {PacketEnvelope} envelope The broadcast (`metadata.target` is `null`).
    * @param {FanOutOptions} [options] `remote: true` for a broadcast from another tab.

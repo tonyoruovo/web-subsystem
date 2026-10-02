@@ -65,7 +65,15 @@ import { DEFAULT_CHANNEL, isWindowBroadcast, originAllowed, readPartitionId } fr
  * @public
  */
 export interface HubPageOptions {
+  /**
+   * @summary The origins that can frame the hub and talk to it.
+   * @description Use exact origins or `https://*.example.com` patterns. The list must not be empty.
+   */
   readonly allowedOrigins: readonly string[];
+  /**
+   * @summary The name of the `BroadcastChannel`.
+   * @description The default is `__platform_window`. All clients must use the same name.
+   */
   readonly channel?: string;
 }
 
@@ -92,9 +100,20 @@ export interface HubPageOptions {
  * @public
  */
 export interface HubPage {
+  /**
+   * @summary The full HTML file of the hub page.
+   */
   readonly html: string;
+  /**
+   * @summary The value of the `Content-Security-Policy` header for the page.
+   * @description It allows only the inline script, by hash, and sets
+   * `frame-ancestors` from the allowlist.
+   */
   readonly csp: string;
-  /** `'sha256-...'` of the inline script. */
+  /**
+   * @summary The hash of the inline script, in CSP form: `'sha256-...'`.
+   * @description The `csp` value contains it. A browser runs the script only when the hash matches.
+   */
   readonly scriptHash: string;
 }
 

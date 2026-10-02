@@ -57,9 +57,28 @@
  * @public
  */
 export interface EnvironmentSource {
-  /** @summary Whether the device has a network connection. */
+  /**
+   * @summary Tells if the device has a network connection.
+   * @description The browser source reads `navigator.onLine`. A `true` value
+   * does not prove that the server is reachable.
+   * @example
+   * Holding a sync while offline
+   * ```ts
+   * if (!environment.online()) return;
+   * ```
+   * @returns {boolean} `true` when the device is online.
+   */
   online(): boolean;
-  /** @summary Whether the page is visible. */
+  /**
+   * @summary Tells if the page is visible.
+   * @description The browser source reads `document.visibilityState`.
+   * @example
+   * Pausing animations in a hidden tab
+   * ```ts
+   * if (!environment.visible()) pauseAnimations();
+   * ```
+   * @returns {boolean} `true` when the page is visible.
+   */
   visible(): boolean;
   /**
    * @summary Calls `listener` after connectivity or visibility changes.

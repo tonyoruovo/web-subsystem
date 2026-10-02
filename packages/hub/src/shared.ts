@@ -161,13 +161,60 @@ export const DEFAULT_CHANNEL = '__platform_window';
  *
  * @public
  */
-export type HubMessage = { readonly [HUB_TAG]: 1 } & (
-  | { readonly type: 'hello' }
-  | { readonly type: 'welcome'; readonly partitionId: string }
-  | { readonly type: 'publish'; readonly envelope: PacketEnvelope }
-  | { readonly type: 'envelope'; readonly envelope: PacketEnvelope }
-  | { readonly type: 'ping' }
-  | { readonly type: 'pong' }
+export type HubMessage = {
+  /**
+   * @summary The tag that marks a hub message. Its value is always 1.
+   */
+  readonly [HUB_TAG]: 1;
+} & (
+  | {
+      /**
+       * @summary A client asks to connect.
+       */
+      readonly type: 'hello';
+    }
+  | {
+      /**
+       * @summary The hub accepts the connection.
+       */
+      readonly type: 'welcome';
+      /**
+       * @summary The partition id of the hub, or `unavailable` when IndexedDB failed.
+       */
+      readonly partitionId: string;
+    }
+  | {
+      /**
+       * @summary A client sends a broadcast to the other tabs.
+       */
+      readonly type: 'publish';
+      /**
+       * @summary The Window-scope broadcast.
+       */
+      readonly envelope: PacketEnvelope;
+    }
+  | {
+      /**
+       * @summary The hub delivers a broadcast from another tab.
+       */
+      readonly type: 'envelope';
+      /**
+       * @summary The Window-scope broadcast.
+       */
+      readonly envelope: PacketEnvelope;
+    }
+  | {
+      /**
+       * @summary A client checks that the hub answers.
+       */
+      readonly type: 'ping';
+    }
+  | {
+      /**
+       * @summary The hub answers a `ping`.
+       */
+      readonly type: 'pong';
+    }
 );
 
 /**

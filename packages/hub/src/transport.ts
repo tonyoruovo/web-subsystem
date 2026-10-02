@@ -60,7 +60,17 @@ export const WINDOW_TRANSPORT_ID = 'window';
  * @public
  */
 export interface RelayHost extends ControlInterface {
-  readonly commands: { attachRelay(relay: ScopeRelay): () => void };
+  /**
+   * @summary The commands that the transport uses.
+   */
+  readonly commands: {
+    /**
+     * @summary Attaches the Window relay.
+     * @param {ScopeRelay} relay The relay.
+     * @returns {() => void} Detaches the relay.
+     */
+    attachRelay(relay: ScopeRelay): () => void;
+  };
 }
 
 /**
@@ -68,7 +78,17 @@ export interface RelayHost extends ControlInterface {
  * @public
  */
 export interface IngestTarget extends ControlInterface {
-  readonly commands: { ingest(envelope: PacketEnvelope): Promise<boolean> };
+  /**
+   * @summary The commands that the transport uses.
+   */
+  readonly commands: {
+    /**
+     * @summary Admits a broadcast from another tab.
+     * @param {PacketEnvelope} envelope The broadcast.
+     * @returns {Promise<boolean>} `true` after the fan-out, `false` for a repeat.
+     */
+    ingest(envelope: PacketEnvelope): Promise<boolean>;
+  };
 }
 
 /**
@@ -89,11 +109,18 @@ export interface IngestTarget extends ControlInterface {
  * @public
  */
 export interface WindowTransportData extends WindowStatus {
-  /** Window broadcasts sent from this tab. */
+  /**
+   * @summary The number of Window broadcasts that this tab sent.
+   */
   sent: number;
-  /** Broadcasts from other tabs handed to the Queue. */
+  /**
+   * @summary The number of broadcasts from other tabs that the transport gave to the Queue.
+   */
   received: number;
-  /** Broadcasts from other tabs that arrived while the Queue was not running. */
+  /**
+   * @summary The number of broadcasts from other tabs that arrived while the Queue did not run.
+   * @description The transport drops these broadcasts.
+   */
   dropped: number;
 }
 
@@ -115,8 +142,32 @@ export interface WindowTransportData extends WindowStatus {
  * @public
  */
 export interface WindowTransportControl {
-  readonly commands: { reconnect(): Promise<void> };
-  readonly views: { readonly state: View<Partial<WindowTransportData>> };
+  /**
+   * @summary The commands of the Window transport.
+   */
+  readonly commands: {
+    /**
+     * @summary Connects the client again now.
+     * @description Use it after a deployment fixed the hub page, instead of waiting for the backoff.
+     * @example
+     * A reconnect button
+     * ```ts
+     * button.onclick = () => commands.reconnect();
+     * ```
+     * @returns {Promise<void>} Resolves when the link is open.
+     * @throws {HubUnavailableError} When the hub does not answer in time.
+     */
+    reconnect(): Promise<void>;
+  };
+  /**
+   * @summary The views of the Window transport.
+   */
+  readonly views: {
+    /**
+     * @summary The state of the transport: the client status and the counters.
+     */
+    readonly state: View<Partial<WindowTransportData>>;
+  };
 }
 
 /**

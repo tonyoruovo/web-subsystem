@@ -49,6 +49,9 @@ import { DEFAULT_CHANNEL, HUB_TAG, isHubMessage, isWindowBroadcast } from './sha
  * @public
  */
 export class HubUnavailableError extends Error {
+  /**
+   * @summary The name of the error class: `'HubUnavailableError'`.
+   */
   override readonly name = 'HubUnavailableError';
 }
 
@@ -81,9 +84,34 @@ export class HubUnavailableError extends Error {
  * @public
  */
 export interface HubLink {
+  /**
+   * @summary Connects, and replaces an earlier connection.
+   * @example
+   * Opening a link
+   * ```ts
+   * const { partitionId } = await link.open((envelope) => deliver(envelope));
+   * ```
+   * @param {(envelope: unknown) => void} onEnvelope Called with each message from the other tabs.
+   * @returns {Promise<{ readonly partitionId: string | null }>} The partition id of the hub, or `null` where it does not matter.
+   * @throws {HubUnavailableError} When the hub does not answer in time.
+   */
   open(onEnvelope: (envelope: unknown) => void): Promise<{ readonly partitionId: string | null }>;
+  /**
+   * @summary Sends a broadcast to the other tabs.
+   * @param {PacketEnvelope} envelope The broadcast.
+   */
   publish(envelope: PacketEnvelope): void;
+  /**
+   * @summary Checks that the hub still answers.
+   * @description Only the iframe link has it. A channel link needs no heartbeat.
+   * @returns {Promise<void>} Resolves when the hub answers.
+   * @throws {HubUnavailableError} When the hub does not answer in time.
+   */
   ping?(): Promise<void>;
+  /**
+   * @summary Disconnects.
+   * @description The iframe link removes its iframe. The channel link closes its channel.
+   */
   close(): void;
 }
 
@@ -110,9 +138,24 @@ export interface HubLink {
  * @public
  */
 export interface IframeLinkOptions {
+  /**
+   * @summary The URL of the hub page on the apex.
+   */
   readonly hubUrl: string;
+  /**
+   * @summary The longest time to wait for `welcome` and for each `pong`, in milliseconds.
+   * @description The default is 5000.
+   */
   readonly timeoutMs?: number;
+  /**
+   * @summary The document to add the iframe to.
+   * @description The default is the global `document`.
+   */
   readonly document?: Document;
+  /**
+   * @summary The window to listen to messages on.
+   * @description The default is the global `window`.
+   */
   readonly window?: Window;
 }
 
@@ -247,7 +290,15 @@ export function iframeLink(options: IframeLinkOptions): HubLink {
  * @public
  */
 export interface ChannelLinkOptions {
+  /**
+   * @summary The name of the `BroadcastChannel`.
+   * @description The default is `__platform_window`. It must match the hub page.
+   */
   readonly channel?: string;
+  /**
+   * @summary Reads the partition id.
+   * @description A tab on the apex gives `() => readPartitionId(indexedDB)`. Without it, the partition id is `null`.
+   */
   readonly partition?: () => Promise<string>;
 }
 

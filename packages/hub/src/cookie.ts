@@ -62,9 +62,15 @@ export type HubPartition = 'unknown' | 'shared' | 'partitioned';
  * @public
  */
 export interface CookieJar {
-  /** Every cookie, as `document.cookie` returns them. */
+  /**
+   * @summary Returns all cookies, as `document.cookie` returns them.
+   * @returns {string} The cookies, in the form `a=1; b=2`.
+   */
   read(): string;
-  /** Sets one cookie, as assigning `document.cookie` does. */
+  /**
+   * @summary Sets one cookie, as an assignment to `document.cookie` does.
+   * @param {string} cookie The cookie with its attributes, for example `a=1; Path=/`.
+   */
   write(cookie: string): void;
 }
 
@@ -86,9 +92,22 @@ export interface CookieJar {
  * @public
  */
 export interface WindowCookie {
+  /**
+   * @summary The random id of this browser session.
+   * @description The relay groups connections by this id.
+   */
   readonly windowId: string;
+  /**
+   * @summary The partition id of the first hub that connected.
+   */
   readonly partitionId: string;
+  /**
+   * @summary The origin of the tab that connected first.
+   */
   readonly origin: string;
+  /**
+   * @summary What the tabs learned about the hub: `unknown`, `shared` or `partitioned`.
+   */
   readonly hub: HubPartition;
 }
 

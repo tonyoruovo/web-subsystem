@@ -53,10 +53,18 @@ export type CircuitStatus = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
  * @public
  */
 export interface CircuitState {
+  /**
+   * @summary The status of the breaker: `CLOSED`, `OPEN` or `HALF_OPEN`.
+   */
   readonly status: CircuitStatus;
-  /** Consecutive failures. */
+  /**
+   * @summary The number of failures in a row.
+   * @description A success sets it back to 0.
+   */
   readonly failures: number;
-  /** When the breaker last opened, or `null`. */
+  /**
+   * @summary The time when the breaker last opened, in Unix milliseconds, or `null`.
+   */
   readonly openedAt: number | null;
 }
 
@@ -93,6 +101,7 @@ export class CircuitBreakers {
   readonly #states = new Map<string, CircuitState>();
 
   /**
+   * @summary Creates a set of breakers that share one configuration.
    * @param {object} options `failureThreshold`, `resetTimeoutMs`, and an optional clock `now`.
    */
   constructor(

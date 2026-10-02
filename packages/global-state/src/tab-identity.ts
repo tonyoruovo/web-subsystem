@@ -55,9 +55,26 @@ export type TabIdStorage = Pick<Storage, 'getItem' | 'setItem'>;
  * @public
  */
 export interface TabChannel {
+  /**
+   * @summary Sends a message to the other tabs.
+   * @param {unknown} message A probe message.
+   */
   postMessage(message: unknown): void;
+  /**
+   * @summary Listens to the messages of the other tabs.
+   * @param {'message'} type The event type.
+   * @param {(event: MessageEvent) => void} listener Called with each message.
+   */
   addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  /**
+   * @summary Stops a listener.
+   * @param {'message'} type The event type.
+   * @param {(event: MessageEvent) => void} listener The listener to remove.
+   */
   removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  /**
+   * @summary Closes the channel.
+   */
   close(): void;
 }
 
@@ -86,13 +103,27 @@ export interface TabChannel {
  * @public
  */
 export interface TabIdentityOptions {
-  /** Where the id is kept across reloads. */
+  /**
+   * @summary Where the id stays across reloads.
+   * @description The default is `sessionStorage`, which a duplicated tab
+   * copies. Where it does not exist, the default is an in-memory store.
+   */
   readonly storage?: TabIdStorage;
-  /** Opens the probe channel; return `null` to skip the duplicate check. */
+  /**
+   * @summary Opens the probe channel.
+   * @description Return `null` to skip the check for duplicated tabs. The
+   * default opens a `BroadcastChannel`.
+   */
   readonly channel?: () => TabChannel | null;
-  /** How long to wait for a `taken` reply, in milliseconds. Default 100. */
+  /**
+   * @summary The time to wait for a `taken` reply, in milliseconds.
+   * @description The default is 100.
+   */
   readonly probeTimeoutMs?: number;
-  /** Mints a new id. */
+  /**
+   * @summary Makes a new id.
+   * @description The default is `tab_` followed by a random UUID.
+   */
   readonly ids?: () => string;
 }
 
@@ -118,9 +149,18 @@ export interface TabIdentityOptions {
  * @public
  */
 export interface TabIdentity {
-  /** The tab's id. */
+  /**
+   * @summary The id of this tab.
+   */
   readonly id: string;
-  /** Stops answering probes and closes the channel. */
+  /**
+   * @summary Stops the answers to probes and closes the channel.
+   * @example
+   * Closing on shutdown
+   * ```ts
+   * addEventListener('pagehide', () => identity.close());
+   * ```
+   */
   close(): void;
 }
 

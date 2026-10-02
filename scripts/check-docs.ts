@@ -1,29 +1,35 @@
 /**
  * @fileoverview
- * @summary Lists the public members of interfaces, classes and object types that have no TSDoc block.
+ * @summary Lists the public members of interfaces, classes and object types whose TSDoc block is missing or incomplete.
  * @description
  * The project convention is that every public member has its own `/** *\/`
- * block. A description on the parent does not count. This script parses every
- * source file in `packages/*\/src` with the TypeScript compiler API and reports
- * each member without a block.
+ * block (docs/PLAN.md, principle 5). A description on the parent does not
+ * count. This script parses every source file in `packages/*\/src` with the
+ * TypeScript compiler API and checks each member.
  *
  * ```text
  *   checked                                         not checked
  *   interface and type-literal members              members of non-exported, @internal declarations
  *   class properties, methods, accessors            #private and `private` members
- *   constructor parameter properties                function parameters, local types
+ *   constructors and their parameter properties     function parameters, local types
  *   enum members
+ *
+ *   a complete block has                            for
+ *   a @summary                                      every member
+ *   a @param for each parameter                     methods and accessors
+ *   a @returns when the result is not void          methods and accessors
  *   ```
  *
- * Run it with `pnpm check:docs`. It exits with code 1 when a member has no
- * block, and prints one `file:line member` line for each.
+ * Run it with `pnpm check:docs`. `pnpm check` also runs it. It prints one
+ * `file:line member: problem` line for each member, and exits with code 1
+ * when it finds a problem.
  *
  * @example
  * Check every package
  * ```ts
  * // pnpm check:docs
- * // packages/core/src/unit.ts:220 UnitContext.id
- * // 1 public member without TSDoc.
+ * // packages/core/src/unit.ts:220 UnitContext.id: no @summary
+ * // 1 public member(s) with a missing or incomplete TSDoc block.
  * ```
  *
  * @author MathAid
@@ -169,5 +175,5 @@ for (const file of files) {
 }
 
 for (const line of missing) console.log(line);
-console.log(`${missing.length} public member(s) without TSDoc.`);
+console.log(`${missing.length} public member(s) with a missing or incomplete TSDoc block.`);
 process.exit(missing.length > 0 ? 1 : 0);

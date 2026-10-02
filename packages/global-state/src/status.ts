@@ -78,12 +78,34 @@ export type PlatformStatus = 'INITIALIZING' | 'IDLE' | 'BUSY' | 'DEGRADED' | 'ST
  * @public
  */
 export interface UnitSummary {
+  /**
+   * @summary The number of units that the summary counts.
+   * @description Global State leaves out itself and the destroyed units.
+   */
   readonly total: number;
+  /**
+   * @summary The number of units that run: `READY`, `BUSY` or `DEGRADED`.
+   */
   readonly running: number;
+  /**
+   * @summary The number of `BUSY` units.
+   */
   readonly busy: number;
+  /**
+   * @summary The number of `DEGRADED` units.
+   */
   readonly degraded: number;
+  /**
+   * @summary The number of `FAILED` units.
+   */
   readonly failed: number;
+  /**
+   * @summary The number of units that wait for a dependency.
+   */
   readonly waiting: number;
+  /**
+   * @summary The number of `INITIALIZING` units.
+   */
   readonly initializing: number;
 }
 

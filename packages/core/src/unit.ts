@@ -233,6 +233,31 @@ export interface UnitContext<S> {
    */
   dependency<C extends ControlInterface = ControlInterface>(target: string): C | undefined;
   /**
+   * @summary Follows a declared dependency as it starts and stops (late binding, ARCHITECTURE §7.2).
+   * @description
+   * Calls `listener` at once with the dependency's control interface (or
+   * `undefined` while it is not running), then again whenever that changes:
+   * it starts, stops, or restarts with a new control interface. Stops by
+   * itself when the unit is torn down. An error thrown by `listener` is
+   * reported, not propagated.
+   * @template C The dependency's control interface type.
+   * @param {string} target A target listed in this unit's `requires`.
+   * @param {(control: C | undefined) => void} listener Called with each new control interface, or `undefined`.
+   * @returns {() => void} Stops following earlier.
+   * @throws {Error} When `target` is not one of this unit's declared dependencies.
+   */
+  watch<C extends ControlInterface = ControlInterface>(
+    target: string,
+    listener: (control: C | undefined) => void,
+  ): () => void;
+  /**
+   * @summary Reports an error the unit recovered from.
+   * @description Goes to the kernel's `onError` with this unit's id. The
+   * unit's lifecycle does not change; use `fail` for errors it cannot recover from.
+   * @param {unknown} error What went wrong.
+   */
+  report(error: unknown): void;
+  /**
    * @summary Returns a sibling feature's control interface (ARCHITECTURE §3.1).
    * @template C The sibling's control interface type.
    * @param {string} featureId The sibling's id inside the parent.

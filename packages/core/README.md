@@ -21,7 +21,7 @@ The kernel of the platform. Every other `@platform/*` package is built on it.
 | Units and the kernel   | `defineSubsystem`, `defineUnit`, `Kernel`, `UnitHandle`, `UnitContext`                  | [ARCHITECTURE §3](../../docs/ARCHITECTURE.md#3-the-unit-model)                               |
 | Lifecycle              | `Lifecycle`, `UnitStatus`, `TRANSITIONS`, `canTransition`                               | [§4](../../docs/ARCHITECTURE.md#4-lifecycle)                                                 |
 | State                  | `createStateCell`, `StateCell`, `StateDefinition`                                       | [§5](../../docs/ARCHITECTURE.md#5-state)                                                     |
-| Views                  | `View`, `createStore`, `deriveView`                                                     | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views)                                       |
+| Views                  | `View`, `createStore`, `deriveView`, `createRingBuffer`                                 | [§6.1](../../docs/ARCHITECTURE.md#61-observable-views)                                       |
 | Dependencies           | `DependencyGraph`, `LateBinding`, `Dependency`                                          | [§7](../../docs/ARCHITECTURE.md#7-dependencies)                                              |
 | Processors and workers | `ProcessorDef`, `defineProcessor`, `ProcessorRunner`, `WorkerBudget`, `createScheduler` | [§8](../../docs/ARCHITECTURE.md#8-processors-and-workers)                                    |
 | Packets                | `Packet`, `PacketEnvelope`, `createEnvelope`, `CorrelationRegistry`                     | [§9](../../docs/ARCHITECTURE.md#9-packets)                                                   |
@@ -165,6 +165,21 @@ requires: [
 
 A unit reads a declared dependency's control interface with `ctx.dependency('storage')`, which is `undefined` while the dependency is not running. Cycles of required dependencies are rejected when the kernel is constructed.
 
+A unit that starts before something it uses (the Logger before Storage) declares it `optional` and follows it with `ctx.watch`, which calls back at once and whenever the dependency starts, stops or restarts. Writes made meanwhile wait in a `LateBinding` buffer:
+
+```ts
+const sink = new LateBinding<LogEntry>({ capacity: 500 });
+
+init(ctx) {
+  ctx.watch<StorageControl>('storage', (storage) => {
+    if (storage) void sink.bind((entry) => storage.commands.append('logs', entry));
+    else sink.unbind();
+  });
+}
+```
+
+`ctx.report(error)` sends an error the unit recovered from (a failed write, a refused broadcast) to the kernel's `onError`, without changing its lifecycle.
+
 ### State and views
 
 `ctx.state` is the unit's own state. Only the unit can update it, through a draft. Every update is checked with `structuredClone`, so functions and symbols are rejected.
@@ -179,6 +194,8 @@ state: {
 
 - `ctx.state.readable` is a **view** of the readable keys, safe to put in a control interface.
 - Pass `persistence` to the kernel to restore persisted keys on start and save them on destroy.
+
+Bounded lists (logs, histories) use `createRingBuffer(capacity)`: it appends in place and builds the frozen snapshot only when it is read after a change. A view is a snapshot, not a stream: a consumer that needs every item should be pushed each one (as the Queue's and the Notification Center's `observe` commands do).
 
 A view is an external store: `getSnapshot()` returns the same frozen object until the value changes, and `subscribe()` notifies once per task. Framework bindings need no adapter:
 

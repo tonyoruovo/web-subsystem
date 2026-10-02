@@ -168,6 +168,56 @@ describe('Kernel — dependencies', () => {
     expect(lookup!('storage')).toBe(NO_CONTROL);
     expect(() => lookup!('logger')).toThrow('not a declared dependency');
   });
+
+  it('follows a late dependency as it starts, stops and restarts (ctx.watch)', async () => {
+    const seen: unknown[] = [];
+    let watch: ((target: string) => () => void) | undefined;
+    const storageControl = () => ({ commands: {}, views: {} });
+    const platform = createTestPlatform([
+      subsystem('logger', {
+        kind: 'centralized',
+        requires: [{ target: 'storage', kind: 'optional' }],
+        init: (ctx) => {
+          watch = (target) => ctx.watch(target, (control) => seen.push(control ?? 'off'));
+          ctx.watch('storage', (control) => seen.push(control ? 'on' : 'off'));
+        },
+      }),
+      subsystem('storage', { control: storageControl }),
+    ]);
+    await platform.start();
+    await platform.settle();
+    expect(seen).toEqual(['off', 'on']);
+
+    await platform.unit('storage').suspend();
+    await platform.settle();
+    await platform.unit('storage').resume();
+    await platform.settle();
+    expect(seen).toEqual(['off', 'on', 'off', 'on']);
+
+    expect(() => watch!('auth')).toThrow('not a declared dependency');
+    await platform.stop();
+    expect(seen).toHaveLength(4); // stopped following on teardown
+  });
+
+  it('reports listener errors and recovered errors without failing the unit', async () => {
+    const platform = createTestPlatform([
+      subsystem('logger', {
+        requires: [{ target: 'storage', kind: 'optional' }],
+        init: (ctx) => {
+          ctx.watch('storage', () => {
+            throw new Error('listener bug');
+          });
+          ctx.report(new Error('recovered'));
+        },
+      }),
+    ]);
+    await platform.start();
+    expect(platform.errors.map((e) => [e.unitId, (e.error as Error).message])).toEqual([
+      ['logger', 'listener bug'],
+      ['logger', 'recovered'],
+    ]);
+    expect(platform.status('logger')).toBe('READY');
+  });
 });
 
 describe('Kernel — features', () => {

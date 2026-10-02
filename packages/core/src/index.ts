@@ -16,7 +16,8 @@
  *   |   +-- ProcessorRunner hosts and failover         (supervisor.ts, host.ts)
  *   |   +-- PacketPort     send and request            (unit.ts, packet.ts)
  *   +-- DependencyGraph    boot order and waiting      (dependency.ts)
- *   +-- PacketRouter       direct until the Queue (M3) (kernel.ts, transport.ts)
+ *   +-- PacketRouter       direct, or the Queue (M3)   (kernel.ts, transport.ts)
+ *   RingBuffer             bounded logs and histories  (ring.ts)
  *   ```
  *
  * Two more entry points exist: `@platform/core/testing` (an in-memory test
@@ -94,6 +95,7 @@ export * from './kernel';
 export * from './lifecycle';
 export * from './packet';
 export * from './processor';
+export * from './ring';
 export * from './route';
 export * from './rpc';
 export * from './scheduler';

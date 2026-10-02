@@ -519,17 +519,49 @@ export class UnitRuntime {
    */
   #createContext(signal: AbortSignal): UnitContext<object> {
     const declared = new Set((this.definition.requires ?? []).map((d) => d.target));
+    const assertDeclared = (target: string) => {
+      if (!declared.has(target)) {
+        throw new Error(`[${this.id}] "${target}" is not a declared dependency.`);
+      }
+    };
     return {
       id: this.id,
       state: this.state,
       signal,
       port: this.host.port(this),
       dependency: <C extends ControlInterface>(target: string) => {
-        if (!declared.has(target)) {
-          throw new Error(`[${this.id}] "${target}" is not a declared dependency.`);
-        }
+        assertDeclared(target);
         return this.host.runtime(target)?.control as C | undefined;
       },
+      watch: <C extends ControlInterface>(
+        target: string,
+        listener: (control: C | undefined) => void,
+      ) => {
+        assertDeclared(target);
+        let first = true;
+        let last: ControlInterface | undefined;
+        const check = () => {
+          if (signal.aborted) return;
+          const control = this.host.runtime(target)?.control;
+          if (!first && control === last) return;
+          first = false;
+          last = control;
+          try {
+            listener(control as C | undefined);
+          } catch (error) {
+            this.host.reportError(error, this.id);
+          }
+        };
+        const unsubscribe = this.host.statuses.subscribe(check);
+        const stop = () => {
+          unsubscribe();
+          signal.removeEventListener('abort', stop);
+        };
+        signal.addEventListener('abort', stop, { once: true });
+        check();
+        return stop;
+      },
+      report: (error) => this.host.reportError(error, this.id),
       sibling: <C extends ControlInterface>(featureId: string) => {
         if (!this.parent) throw new Error(`[${this.id}] Only features have siblings.`);
         const sibling = this.parent.features.find((f) => f.definition.id === featureId);

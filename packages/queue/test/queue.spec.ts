@@ -197,6 +197,58 @@ describe('observe', () => {
   });
 });
 
+describe('ingest', () => {
+  const remote = (
+    messageId: string,
+    scope: 'window' | 'tab' = 'window',
+    target: string | null = null,
+  ) =>
+    createEnvelope(
+      { eventId: 'news', payload: { n: 1 }, ...(target ? { target } : {}) },
+      { source: 'echo', scope, ids: () => messageId },
+    );
+
+  it('fans out a broadcast from another tab once, on a new span of the same trace', async () => {
+    const { control, received } = await setup({ options: { ids: () => 'span-local' } });
+    const envelope = remote('m-1');
+    await expect(control.commands.ingest(envelope)).resolves.toBe(true);
+    await expect(control.commands.ingest(envelope)).resolves.toBe(false);
+
+    expect(received).toEqual(['news']); // the local 'echo' hears the remote 'echo'
+    const [settled] = control.views.trails.getSnapshot();
+    expect(settled).toMatchObject({ outcome: 'completed', traceId: envelope.metadata.traceId });
+    expect(actions(settled.trail)).toEqual([
+      'ingested:queue',
+      'dispatched:queue',
+      'completed:queue',
+    ]);
+    expect(control.views.state.getSnapshot()).toMatchObject({ completed: 1, duplicates: 1 });
+  });
+
+  it('refuses requests and Tab broadcasts from other tabs, and anything once stopped', async () => {
+    const { kernel, control } = await setup();
+    await expect(control.commands.ingest(remote('m-2', 'tab'))).rejects.toMatchObject({
+      reason: 'scope',
+    });
+    await expect(control.commands.ingest(remote('m-3', 'window', 'echo'))).rejects.toMatchObject({
+      reason: 'scope',
+    });
+    await kernel.unit(QUEUE_ID).suspend();
+    const stopping = kernel.stop();
+    await stopping;
+    await expect(control.commands.ingest(remote('m-4'))).rejects.toMatchObject({
+      reason: 'stopped',
+    });
+  });
+
+  it('passes remote: true to the fan-out', async () => {
+    const fanOut = vi.fn(async () => {});
+    const { control } = await setup({ options: { fanOut } });
+    await control.commands.ingest(remote('m-5'));
+    expect(fanOut).toHaveBeenCalledWith(expect.anything(), expect.anything(), { remote: true });
+  });
+});
+
 describe('retries and dead letters', () => {
   it('retries while the target is suspended, then delivers', async () => {
     const { kernel, port, control } = await setup({ options: { retryBaseMs: 50 } });

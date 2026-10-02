@@ -18,6 +18,8 @@
  *     --> dispatch (CRITICAL at once, the rest through the scheduler), at most maxActive at a time
  *           stamp `dispatched`
  *           request  --> kernel.deliver          broadcast --> fanOut (Notification Center)
+ *   other tabs --ingest(envelope)--> deduplicate (messageId) --> new span, same trace --> admission
+ *     --> waiting --> fanOut(kernel, envelope, { remote: true })
  *     --> settle
  *           completed                    stamp `completed`, resolve with the reply
  *           target not running           stamp `retry-scheduled`, retry with backoff; then dead letter
@@ -59,6 +61,7 @@ import {
   appendFingerprint,
   assertSendAllowed,
   computeBackoff,
+  createDeduplicator,
   createRingBuffer,
   createScheduler,
   createStore,
@@ -80,6 +83,8 @@ import {
   QueueRejectedError,
   type AdmissionControl,
   type DeadLetter,
+  type FanOut,
+  type FanOutOptions,
   type QueueControl,
   type QueueData,
   type QueueOptions,
@@ -143,6 +148,8 @@ interface Item {
   readonly resolve: (value: unknown) => void;
   readonly reject: (error: unknown) => void;
   readonly kernel: Kernel;
+  /** Came from another tab through `ingest`. */
+  readonly remote: boolean;
   attempts: number;
   previousWait: number;
   timer: ReturnType<typeof setTimeout> | null;
@@ -185,8 +192,9 @@ export function createQueue(options: QueueOptions = {}): Queue {
   const deadLetterCapacity = options.deadLetterCapacity ?? 100;
   const trailHistory = options.trailHistory ?? 50;
   const scheduler = options.scheduler ?? createScheduler();
-  const fanOut =
-    options.fanOut ?? ((kernel: Kernel, envelope: PacketEnvelope) => kernel.broadcast(envelope));
+  const ids = options.ids ?? (() => crypto.randomUUID());
+  const dedupe = createDeduplicator(options.dedupeCapacity ?? 1000);
+  const fanOut: FanOut = options.fanOut ?? directFanOut;
 
   const tiers = new Map<Importance, Item[]>(TIERS.map((tier) => [tier, []]));
   const retrying = new Set<Item>();
@@ -271,11 +279,13 @@ export function createQueue(options: QueueOptions = {}): Queue {
     kernel: Kernel,
     envelope: PacketEnvelope,
     expectReply: boolean,
+    remote = false,
   ): Promise<unknown> {
     const { metadata, importance } = envelope;
     if (stopped) refuse(envelope, 'stopped');
 
-    const senderScope = kernel.scopeOf(metadata.source);
+    // The send rule binds this tab's senders; a remote sender was checked in its own tab.
+    const senderScope = remote ? undefined : kernel.scopeOf(metadata.source);
     if (senderScope !== undefined) {
       try {
         assertSendAllowed({
@@ -301,11 +311,12 @@ export function createQueue(options: QueueOptions = {}): Queue {
         resolve,
         reject,
         kernel,
+        remote,
         attempts: 0,
         previousWait: retryBaseMs,
         timer: null,
       };
-      stamp(item, 'enqueued');
+      stamp(item, remote ? 'ingested' : 'enqueued');
       control?.commands.beginWork({
         id: metadata.messageId,
         subsystemId: metadata.source,
@@ -355,7 +366,7 @@ export function createQueue(options: QueueOptions = {}): Queue {
       stamp(item, 'dispatched', { counter: item.attempts > 1 ? item.attempts : null });
       let reply: unknown;
       if (metadata.target === null) {
-        await fanOut(item.kernel, item.envelope);
+        await fanOut(item.kernel, item.envelope, item.remote ? { remote: true } : undefined);
       } else {
         // The trail comes back with the target's own entries, whether it replies or throws.
         reply = await item.kernel.deliver(item.envelope, {
@@ -470,6 +481,7 @@ export function createQueue(options: QueueOptions = {}): Queue {
         completed: 0,
         failed: 0,
         rejected: 0,
+        duplicates: 0,
       } as QueueData,
       policy: {
         depth: readable,
@@ -479,6 +491,7 @@ export function createQueue(options: QueueOptions = {}): Queue {
         completed: readable,
         failed: readable,
         rejected: readable,
+        duplicates: readable,
       },
     },
     init(ctx) {
@@ -523,6 +536,26 @@ export function createQueue(options: QueueOptions = {}): Queue {
         bindDeadLetterSink: (deadLetterSink: (letter: DeadLetter) => void | Promise<void>) =>
           sink.bind(deadLetterSink),
         unbindDeadLetterSink: () => sink.unbind(),
+        async ingest(envelope: PacketEnvelope): Promise<boolean> {
+          const kernel = lastKernel;
+          if (!kernel || stopped) throw new QueueRejectedError('stopped', envelope.metadata.messageId);
+          const { metadata } = envelope;
+          if (metadata.target !== null || metadata.scope === 'page' || metadata.scope === 'tab') {
+            refuse(envelope, 'scope', 'Only Window and Global broadcasts arrive from other tabs.');
+          }
+          if (dedupe.seen(metadata.messageId)) {
+            ctx.state.update((s) => void s.duplicates++);
+            return false;
+          }
+          // A receiver starts its own trail on the same trace (ARCHITECTURE §9.4).
+          const received: PacketEnvelope = {
+            ...envelope,
+            metadata: { ...metadata, spanId: ids(), parentSpanId: metadata.spanId },
+            fingerprints: { entries: [], dropped: 0 },
+          };
+          await route(kernel, received, false, true);
+          return true;
+        },
         observe(observer: (settled: SettledPacket) => void) {
           observers.add(observer);
           return () => void observers.delete(observer);
@@ -539,4 +572,21 @@ export function createQueue(options: QueueOptions = {}): Queue {
       return { route: (envelope, expectReply) => route(kernel, envelope, expectReply) };
     },
   };
+}
+
+/**
+ * @summary The fan-out without a Notification Center: the kernel's direct broadcast.
+ * @description A remote broadcast also reaches a subscriber with the sender's
+ * id (another instance of it); a subscriber that throws is not the sender's problem.
+ * @internal
+ */
+async function directFanOut(
+  kernel: Kernel,
+  envelope: PacketEnvelope,
+  options?: FanOutOptions,
+): Promise<void> {
+  if (!options?.remote) return kernel.broadcast(envelope);
+  for (const id of kernel.subscribers(envelope.eventId)) {
+    await kernel.deliver(envelope, { to: id, clone: true }).catch(() => undefined);
+  }
 }

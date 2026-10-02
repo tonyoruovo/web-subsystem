@@ -14,6 +14,7 @@
  *                                       |   each: access control, circuit breaker, filter
  *                                       |   each gets its own copy of the payload
  *                                       +-- history: one record and one trail per broadcast
+ *                                       +-- scope relay (Window, Global): sent on beyond this tab
  *   ```
  *
  * A subscriber that throws is recorded as failed; it never fails the
@@ -56,6 +57,8 @@ import {
   type Kernel,
   type PacketEnvelope,
   type PacketHeader,
+  type Scope,
+  type ScopeRelay,
   type SubsystemDefinition,
   type View,
 } from '@platform/core';
@@ -168,9 +171,11 @@ export interface DeliveryRecord {
  *
  * @description
  * Identifies the broadcast (`messageId`, `traceId`, `eventId`, `source`,
- * `timestamp`), says whether it was `fanned-out` or `rejected` (with the
- * `reason`), lists every delivery, and holds the full fingerprint `trail`:
- * the sender's entries, `fanned-out`, then one entry per delivery.
+ * `timestamp`), says whether it came from another tab (`remote`), whether
+ * it was `fanned-out` or `rejected` (with the `reason`), lists every
+ * delivery, names the scope relay it was sent on to (`relayed`, or `null`),
+ * and holds the full fingerprint `trail`: the sender's entries,
+ * `fanned-out`, one entry per delivery, then `relayed` when it was.
  *
  * @example
  * Example 1: Reading the latest broadcast
@@ -193,7 +198,9 @@ export interface BroadcastRecord {
   readonly eventId: string;
   readonly source: string;
   readonly timestamp: number;
+  readonly remote: boolean;
   readonly outcome: 'fanned-out' | 'rejected';
+  readonly relayed: Scope | null;
   readonly reason: string | null;
   readonly deliveries: readonly DeliveryRecord[];
   readonly trail: FingerprintTrail;
@@ -205,7 +212,7 @@ export interface BroadcastRecord {
  * @example
  * Example 1: A quiet platform
  * ```ts
- * // { events: 4, subscriptions: 2, broadcasts: 10, delivered: 18, failed: 0, rejected: 0 }
+ * // { events: 4, subscriptions: 2, broadcasts: 10, delivered: 18, failed: 0, rejected: 0, relayed: 3 }
  * ```
  *
  * @example
@@ -229,6 +236,8 @@ export interface NotificationData {
   failed: number;
   /** Broadcasts refused. */
   rejected: number;
+  /** Broadcasts sent on to a scope relay. */
+  relayed: number;
 }
 
 /**
@@ -238,8 +247,11 @@ export interface NotificationData {
  * `registerEvent` adds or replaces an event definition. `subscribe` adds a
  * programmatic subscription and returns its unsubscribe function. `observe`
  * calls an observer with every history record (the view keeps only the last
- * ones) and returns the function that stops it. Views:
- * `state` (counters) and `history` (the last broadcasts, oldest first).
+ * ones) and returns the function that stops it. `attachRelay` attaches the
+ * scope relay for one scope (replacing any earlier one) and returns the
+ * function that detaches it: every broadcast of that scope sent from this tab
+ * is handed to it after the local fan-out. Views: `state` (counters) and
+ * `history` (the last broadcasts, oldest first).
  *
  * @example
  * Example 1: Registering an event at runtime
@@ -261,6 +273,7 @@ export interface NotificationControl {
     registerEvent(definition: EventDefinition): void;
     subscribe(eventId: string, listener: EventListener, options?: SubscriptionOptions): () => void;
     observe(observer: (record: BroadcastRecord) => void): () => void;
+    attachRelay(relay: ScopeRelay): () => void;
   };
   readonly views: {
     readonly state: View<Partial<NotificationData>>;
@@ -333,6 +346,33 @@ export class BroadcastRejectedError extends Error {
 }
 
 /**
+ * @summary How a broadcast reached this tab, for {@linkcode NotificationCenter.fanOut}.
+ *
+ * @description
+ * `remote: true` marks a broadcast that came from another tab (through a
+ * scope relay and the Queue's `ingest`). It is delivered to every
+ * subscriber here, including one with the sender's id (that is another
+ * instance of it), and it is not relayed again.
+ *
+ * @example
+ * Example 1: A local broadcast (the default)
+ * ```ts
+ * await notification.fanOut(kernel, envelope);
+ * ```
+ *
+ * @example
+ * Example 2: One from another tab
+ * ```ts
+ * await notification.fanOut(kernel, envelope, { remote: true });
+ * ```
+ *
+ * @public
+ */
+export interface FanOutOptions {
+  readonly remote?: boolean;
+}
+
+/**
  * @summary The Notification Center: its subsystem and the fan-out the Queue calls.
  *
  * @description
@@ -366,11 +406,12 @@ export interface NotificationCenter {
    * @summary Delivers one broadcast to every allowed subscriber.
    * @param {Kernel} kernel The kernel, to reach subsystem subscribers.
    * @param {PacketEnvelope} envelope The broadcast (`metadata.target` is `null`).
-   * @returns {Promise<void>} Resolves once every subscriber has been handled.
+   * @param {FanOutOptions} [options] `remote: true` for a broadcast from another tab.
+   * @returns {Promise<void>} Resolves once every subscriber has been handled (and the relay, if any, has it).
    * @throws {UnitUnavailableError} While the Notification Center is not running.
    * @throws {BroadcastRejectedError} When the source may not publish the event, or strict mode does not know it.
    */
-  fanOut(kernel: Kernel, envelope: PacketEnvelope): Promise<void>;
+  fanOut(kernel: Kernel, envelope: PacketEnvelope, options?: FanOutOptions): Promise<void>;
 }
 
 /** @summary A programmatic subscription. @internal */
@@ -438,6 +479,7 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
   });
   const history = createRingBuffer<BroadcastRecord>(historySize);
   const observers = new Set<(record: BroadcastRecord) => void>();
+  const relays = new Map<Scope, ScopeRelay>();
   let counters: ((update: (s: NotificationData) => void) => void) | null = null;
   let report: (error: unknown) => void = () => {};
   let nextKey = 0;
@@ -459,8 +501,13 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
   const fingerprint = (actionName: string, extra: Parameters<typeof makeFingerprint>[2] = {}) =>
     makeFingerprint(NOTIFICATION_ID, actionName, { timestamp: now(), ...extra });
 
-  async function fanOut(kernel: Kernel, envelope: PacketEnvelope): Promise<void> {
+  async function fanOut(
+    kernel: Kernel,
+    envelope: PacketEnvelope,
+    fanOutOptions: FanOutOptions = {},
+  ): Promise<void> {
     if (!counters) throw new UnitUnavailableError(NOTIFICATION_ID, 'not running');
+    const remote = fanOutOptions.remote === true;
     const { eventId, metadata } = envelope;
     const definition = events.get(eventId);
     const base = {
@@ -469,6 +516,7 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
       eventId,
       source: metadata.source,
       timestamp: now(),
+      remote,
     };
 
     const refusal =
@@ -482,7 +530,14 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
         envelope.fingerprints,
         fingerprint('rejected', { level: 'WARN', message: refusal }),
       );
-      remember({ ...base, outcome: 'rejected', reason: refusal, deliveries: [], trail });
+      remember({
+        ...base,
+        outcome: 'rejected',
+        reason: refusal,
+        deliveries: [],
+        relayed: null,
+        trail,
+      });
       counters((s) => void s.rejected++);
       throw new BroadcastRejectedError(eventId, refusal);
     }
@@ -493,7 +548,7 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
     const targets: Target[] = [
       ...kernel
         .subscribers(eventId)
-        .filter((id) => id !== metadata.source)
+        .filter((id) => remote || id !== metadata.source) // a remote sender is another instance
         .map((id) => ({ kind: 'unit' as const, subscriber: id, priority: 0 })),
       ...subscriptions
         .filter((s) => s.eventId === eventId)
@@ -554,9 +609,38 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
       }
     }
 
-    remember({ ...base, outcome: 'fanned-out', reason: null, deliveries, trail });
+    // Send it on beyond this tab, without the trail: receivers start their own (ARCHITECTURE §9.4).
+    const relay = remote ? undefined : relays.get(metadata.scope);
+    let relayed: Scope | null = null;
+    if (relay) {
+      try {
+        relay.publish({ ...envelope, fingerprints: { entries: [], dropped: 0 } });
+        relayed = relay.scope;
+        trail = appendFingerprint(trail, fingerprint('relayed', { componentId: relay.scope }));
+      } catch (error) {
+        report(error);
+        trail = appendFingerprint(
+          trail,
+          fingerprint('relay-failed', {
+            componentId: relay.scope,
+            level: 'ERROR',
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+    }
+
+    remember({
+      ...base,
+      outcome: 'fanned-out',
+      reason: null,
+      deliveries,
+      relayed,
+      trail,
+    });
     counters((s) => {
       s.broadcasts += 1;
+      if (relayed) s.relayed += 1;
       s.delivered += deliveries.filter((d) => d.outcome === 'delivered').length;
       s.failed += deliveries.filter((d) => d.outcome === 'failed').length;
     });
@@ -583,6 +667,7 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
         delivered: 0,
         failed: 0,
         rejected: 0,
+        relayed: 0,
       } as NotificationData,
       policy: {
         events: readable,
@@ -591,6 +676,7 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
         delivered: readable,
         failed: readable,
         rejected: readable,
+        relayed: readable,
       },
     },
     init(ctx) {
@@ -629,6 +715,12 @@ export function createNotificationCenter(options: NotificationOptions = {}): Not
         observe(observer: (record: BroadcastRecord) => void) {
           observers.add(observer);
           return () => void observers.delete(observer);
+        },
+        attachRelay(relay: ScopeRelay) {
+          relays.set(relay.scope, relay);
+          return () => {
+            if (relays.get(relay.scope) === relay) relays.delete(relay.scope);
+          };
         },
       },
       views: { state: ctx.state.readable, history: history.view },

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRingBuffer } from '../src';
+import { createDeduplicator, createRingBuffer } from '../src';
 
 describe('createRingBuffer', () => {
   it('keeps the newest items, counts evictions, and freezes items', () => {
@@ -53,5 +53,18 @@ describe('createRingBuffer', () => {
       vi.useRealTimers();
     }
     expect(() => createRingBuffer(0)).toThrow(RangeError);
+  });
+});
+
+describe('createDeduplicator', () => {
+  it('reports repeats and forgets the oldest ids', () => {
+    const dedupe = createDeduplicator(2);
+    expect(dedupe.seen('a')).toBe(false);
+    expect(dedupe.seen('a')).toBe(true);
+    dedupe.seen('b');
+    dedupe.seen('c');
+    expect(dedupe.seen('a')).toBe(false);
+    expect(dedupe.capacity).toBe(2);
+    expect(() => createDeduplicator(0)).toThrow(RangeError);
   });
 });

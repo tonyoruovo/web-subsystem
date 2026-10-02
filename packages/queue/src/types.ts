@@ -96,12 +96,25 @@ export interface AdmissionControl {
 }
 
 /**
+ * @summary How a broadcast reached this tab: `remote: true` for one from another tab.
+ * @description The same shape as `@platform/notification`'s `FanOutOptions`.
+ * @public
+ */
+export interface FanOutOptions {
+  readonly remote?: boolean;
+}
+
+/**
  * @summary Hands a broadcast to the Notification Center.
  * @description `@platform/notification`'s `fanOut` matches it. Without one,
  * the Queue uses the kernel's direct broadcast.
  * @public
  */
-export type FanOut = (kernel: Kernel, envelope: PacketEnvelope) => Promise<void>;
+export type FanOut = (
+  kernel: Kernel,
+  envelope: PacketEnvelope,
+  options?: FanOutOptions,
+) => Promise<void>;
 
 /**
  * @summary Options for `createQueue`.
@@ -115,7 +128,8 @@ export type FanOut = (kernel: Kernel, envelope: PacketEnvelope) => Promise<void>
  * - `maxActive` (default 8): packets dispatched at the same time.
  * - `deadLetterCapacity` (default 100) and `trailHistory` (default 50): how
  *   many dead letters and settled trails are kept.
- * - `scheduler`, `now` and `random`: replace the scheduler, clock and jitter source.
+ * - `dedupeCapacity` (default 1000): message ids remembered to drop repeats from other tabs.
+ * - `scheduler`, `now`, `random` and `ids`: replace the scheduler, clock, jitter source and span ids.
  *
  * @example
  * Example 1: Wired to the Notification Center
@@ -143,6 +157,8 @@ export interface QueueOptions {
   readonly scheduler?: Scheduler;
   readonly now?: () => number;
   readonly random?: () => number;
+  readonly ids?: () => string;
+  readonly dedupeCapacity?: number;
 }
 
 /**
@@ -265,7 +281,7 @@ export interface SettledPacket {
  * @example
  * Example 1: A quiet queue
  * ```ts
- * // { depth: 0, inFlight: 0, retrying: 0, deadLetters: 0, completed: 42, failed: 0, rejected: 0 }
+ * // { depth: 0, inFlight: 0, retrying: 0, deadLetters: 0, completed: 42, failed: 0, rejected: 0, duplicates: 0 }
  * ```
  *
  * @example
@@ -288,6 +304,8 @@ export interface QueueData {
   completed: number;
   failed: number;
   rejected: number;
+  /** Envelopes from other tabs dropped as repeats. */
+  duplicates: number;
 }
 
 /**
@@ -298,7 +316,9 @@ export interface QueueData {
  * writes buffered and future dead letters to a sink (Storage, from M6);
  * `unbindDeadLetterSink()` goes back to buffering; `observe(observer)` calls
  * `observer` with every settled packet (the `trails` view keeps only the last
- * ones, so a log must observe) and returns the function that stops it.
+ * ones, so a log must observe) and returns the function that stops it;
+ * `ingest(envelope)` admits a Window or Global broadcast from another tab
+ * (resolving `false` for a repeat), starting a new span on its trace.
  * Views: `state` (counters),
  * `trails` (recently settled packets) and `deadLetters`.
  *
@@ -322,6 +342,7 @@ export interface QueueControl {
     bindDeadLetterSink(sink: (letter: DeadLetter) => void | Promise<void>): Promise<void>;
     unbindDeadLetterSink(): void;
     observe(observer: (settled: SettledPacket) => void): () => void;
+    ingest(envelope: PacketEnvelope): Promise<boolean>;
   };
   readonly views: {
     readonly state: View<Partial<QueueData>>;

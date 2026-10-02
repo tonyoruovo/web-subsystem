@@ -18,6 +18,7 @@
  *   +-- DependencyGraph    boot order and waiting      (dependency.ts)
  *   +-- PacketRouter       direct, or the Queue (M3)   (kernel.ts, transport.ts)
  *   RingBuffer             bounded logs and histories  (ring.ts)
+ *   ScopeRelay             Window and Global broadcasts beyond the tab (relay.ts)
  *   ```
  *
  * Two more entry points exist: `@platform/core/testing` (an in-memory test
@@ -95,6 +96,7 @@ export * from './kernel';
 export * from './lifecycle';
 export * from './packet';
 export * from './processor';
+export * from './relay';
 export * from './ring';
 export * from './route';
 export * from './rpc';

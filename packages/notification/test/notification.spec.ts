@@ -45,7 +45,8 @@ async function setup(subsystems: SubsystemDefinition[], options: NotificationOpt
   const platform = createTestPlatform([notification.subsystem, ...subsystems], { clock });
   await platform.start();
   const control = platform.unit<NotificationControl>(NOTIFICATION_ID).control!;
-  const fanOut = (envelope: PacketEnvelope) => notification.fanOut(platform.kernel, envelope);
+  const fanOut = (envelope: PacketEnvelope, remote = false) =>
+    notification.fanOut(platform.kernel, envelope, { remote });
   return { platform, control, fanOut, clock };
 }
 
@@ -217,6 +218,67 @@ describe('fanOut', () => {
       'observer bug',
       'observer bug',
     ]);
+  });
+
+  it('hands local broadcasts of a relayed scope to the relay, without the trail', async () => {
+    const received: { id: string; payload: unknown }[] = [];
+    const { control, fanOut } = await setup([listener('a', received)]);
+    const sent: PacketEnvelope[] = [];
+    const detach = control.commands.attachRelay({
+      scope: 'window',
+      publish: (e) => void sent.push(e),
+    });
+    const windowBroadcast = createEnvelope(
+      { eventId: 'news', payload: { n: 2 } },
+      { source: 'x', scope: 'window' },
+    );
+
+    await fanOut(broadcast('x')); // tab scope: not relayed
+    await fanOut(windowBroadcast);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].fingerprints).toEqual({ entries: [], dropped: 0 });
+    const record = control.views.history.getSnapshot().at(-1)!;
+    expect(record).toMatchObject({ relayed: 'window', remote: false });
+    expect(record.trail.entries.at(-1)).toMatchObject({
+      actionName: 'relayed',
+      componentId: 'window',
+    });
+    expect(control.views.state.getSnapshot().relayed).toBe(1);
+
+    detach();
+    await fanOut(windowBroadcast);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('delivers a remote broadcast to a subscriber with the sender’s id, and never relays it', async () => {
+    const received: { id: string; payload: unknown }[] = [];
+    const { platform, control, fanOut } = await setup([listener('consent', received)]);
+    const relay = vi.fn(() => {
+      throw new Error('offline');
+    });
+    control.commands.attachRelay({ scope: 'window', publish: relay });
+    const fromAnotherTab = createEnvelope(
+      { eventId: 'news', payload: { n: 3 } },
+      { source: 'consent', scope: 'window' },
+    );
+
+    await fanOut(fromAnotherTab, true);
+    expect(received.map((r) => r.id)).toEqual(['consent']);
+    expect(relay).not.toHaveBeenCalled();
+    expect(control.views.history.getSnapshot().at(-1)).toMatchObject({
+      remote: true,
+      relayed: null,
+    });
+
+    // A local one is relayed; a relay that throws is reported and recorded.
+    await fanOut(
+      createEnvelope({ eventId: 'news', payload: { n: 4 } }, { source: 'x', scope: 'window' }),
+    );
+    expect(platform.errors.map((e) => (e.error as Error).message)).toEqual(['offline']);
+    expect(control.views.history.getSnapshot().at(-1)!.trail.entries.at(-1)).toMatchObject({
+      actionName: 'relay-failed',
+      level: 'ERROR',
+    });
   });
 
   it('refuses to fan out while not running', async () => {

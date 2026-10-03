@@ -717,6 +717,39 @@ This section is the design of milestone M6. It amends the `crypto` and `storage`
 - **Quota.** The subsystem checks the quota on an interval. At the warning level it broadcasts `storage:quota`. At the critical level it also evicts expired entries first, then the entries with the lowest weight.
 - **Kernel persistence.** `createStatePersistence()` gives the kernel's `persistence` option. It uses IndexedDB (or `localStorage`, then memory) on the main thread directly, because the kernel loads state before Storage runs.
 - **Late binding.** The Queue keeps its dead letters, and the Logger its entries, in collections when Storage runs (`ctx.watch`). Dead letters survive a reload.
-- **Order.** The coordinator handles one request at a time, so the writes of all tabs apply in order. `maxEntries` trims the oldest entries of a collection after a write.
-- Dropped for now: query indexes, compaction, backups, an in-memory read cache, field-level encryption, and the WebSQL and cookie fallbacks of the proposal.
+- **Order.** The coordinator handles one request at a time, so the writes of all tabs apply in order. `maxEntries` trims the oldest entries of a collection after a write. When more than one coordinator runs, a Web Lock keeps the order (§18.3).
+- Dropped for now: range queries on indexes, compaction, backups, an in-memory read cache, field-level encryption, and the WebSQL and cookie fallbacks of the proposal.
 
+### 18.3 Storage: the open items of M6
+
+The week 40 report listed three open items after M6. This section closes them, before M7.
+
+**1. Storage and Crypto use the same keys (key check).** Storage and Crypto take their key source separately, and nothing checked that they match. When they do not match, `crypto.forget()` does not erase the data of Storage, so crypto-shredding fails without a sign.
+
+- A key id is not secret, and the same source always gives the same ids: device keys come from the same database, and the id of injected material is a digest of the material. So Storage compares the ids of its active encryption and HMAC keys with the ids in the state of Crypto.
+- Storage checks when Crypto starts (`ctx.watch`), and again after it reloads its keys on `crypto:keys-changed`.
+- The state of Storage shows the result: `keyCheck` is `match`, `mismatch` or `unchecked` (no Crypto, or no encryption).
+- On `mismatch`, Storage reports a `KeyMismatchError` and refuses encrypted writes (fail closed). Reads still work, so the app can move its data.
+- Storage does not read the key source of Crypto: a material source holds secret key bytes, and state is readable by every unit.
+
+**2. Query indexes.** A `where` filter decodes every entry of a collection. A collection can now declare indexes:
+
+```text
+  commands.collection({ name: 'orders', indexes: { status: (order) => order.status, tag: (order) => order.tags } })
+  orders.lookup('status', 'open')          equality only; an array value makes one index entry per item
+```
+
+- An index function is a portable function. It runs in the coordinator on the value of each write.
+- Index entries live in a reserved module of the namespace, `<collection>~index`, in the same backend. The `~` is not valid in a collection name, so no collection can use it.
+- An index entry key is `<index>:<value>:<key>`, with the value and the key URI-encoded. A lookup is one prefix query, then a read of each matching entry.
+- A reverse entry (`@:<key>`) lists the index values of each entry, so a write or a delete removes the old index entries without decoding the old value.
+- **Encrypted collections** do not store index values in plain text. The value part is an HMAC of the value with the active HMAC key. A lookup tries every HMAC key of the store, so a rotation does not hide old entries.
+- Expired or deleted entries can leave stale index entries. A lookup removes the stale entries that it finds.
+- After a change to the index functions, `collection.reindex()` builds all index entries again. `clear()` clears the index module too.
+- Dropped for now: range queries and sorting by an index.
+
+**3. Two coordinators.** On WebKit, every tab runs its own coordinator on the main thread (§18.2). A tab after a failover does the same. Two coordinators can interleave their writes.
+
+- Each request of the coordinator runs inside a Web Lock (`navigator.locks`), named after the database. Reads take the lock in `shared` mode. Writes, batches, migrations and evictions take it in `exclusive` mode.
+- The lock queue is first-in, first-out for the origin, so the writes of all tabs apply in one order on every host.
+- Without the Web Locks API (WebKit before 15.4), the coordinator runs as before, and its status says `locks: false`.

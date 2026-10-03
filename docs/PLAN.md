@@ -148,6 +148,8 @@ No code is written until both steps are done.
 
 **Gate:** with the shared worker killed during a write, storage fails over without data loss (browser test). _Done 2026-10-03: `packages/storage/test/storage.browser.spec.ts` closes the shared worker when it receives a write; the runner runs the write again on the main thread, and every entry is there, in Chrome, Chromium and Edge. WebKit runs the coordinator on the main thread from the start (§18.2)._
 
+**After the gate:** close the three open items of M6 before M7 (ARCHITECTURE §18.3): a key check between Storage and Crypto, query indexes on collections, and a Web Lock that orders the writes of more than one coordinator.
+
 ### M7 — Connectivity: Network, Auth, Sync, Realtime
 
 - `network`: retries, deduplication, cache, and an interceptor feature

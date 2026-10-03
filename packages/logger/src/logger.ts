@@ -61,6 +61,76 @@ import { sanitize, type SanitizeOptions } from './sanitize';
 export const LOGGER_ID = 'logger';
 
 /**
+ * @summary The name of the Storage collection that keeps log entries.
+ * @public
+ */
+export const LOG_COLLECTION = 'logger.entries';
+
+/**
+ * @summary The part of a Storage collection that the Logger uses.
+ * @description The Logger does not import `@platform/storage`. Any control
+ * with this shape works.
+ * @public
+ */
+export interface StoredLog {
+  /**
+   * @summary Writes an entry.
+   * @example
+   * Writing
+   * ```ts
+   * await stored.set(`${entry.sessionId}:${entry.id}`, entry);
+   * ```
+   * @param {string} key The key.
+   * @param {LogEntry} value The entry.
+   * @returns {Promise<void>} Resolves when the entry is stored.
+   */
+  set(key: string, value: LogEntry): Promise<void>;
+  /**
+   * @summary Returns the stored entries, oldest first.
+   * @example
+   * Reading
+   * ```ts
+   * const rows = await stored.entries();
+   * ```
+   * @returns {Promise<Array<{ key: string; value: LogEntry }>>} The entries.
+   */
+  entries(): Promise<Array<{ key: string; value: LogEntry }>>;
+}
+
+/**
+ * @summary The part of the Storage control that the Logger uses.
+ * @example
+ * Example 1: Watching Storage
+ * ```ts
+ * ctx.watch<LogStorage>('storage', (storage) => storage?.commands.collection({ name: LOG_COLLECTION }));
+ * ```
+ * @example
+ * Example 2: A fake for a test
+ * ```ts
+ * const storage: LogStorage = { commands: { collection: () => fakeLog }, views: {} };
+ * ```
+ * @public
+ */
+export interface LogStorage extends ControlInterface {
+  /**
+   * @summary The commands that the Logger uses.
+   */
+  readonly commands: {
+    /**
+     * @summary Returns a collection.
+     * @example
+     * Getting the log collection
+     * ```ts
+     * storage.commands.collection({ name: LOG_COLLECTION, maxEntries: 1000 });
+     * ```
+     * @param definition The name and the largest number of entries.
+     * @returns {StoredLog} The collection.
+     */
+    collection(definition: { name: string; maxEntries?: number }): StoredLog;
+  };
+}
+
+/**
  * @summary The rank of each level: an entry is kept when its rank is at least the threshold's.
  * @constant {Readonly<Record<LogLevel, number>>}
  * @public
@@ -466,6 +536,23 @@ export interface LoggerOptions {
    */
   readonly sinkCapacity?: number;
   /**
+   * @summary Keeps entries in Storage when Storage runs, or `false` to keep them in memory only.
+   * @description The default keeps the last 1000 entries of level `INFO` and higher,
+   * in the collection `logger.entries`. `history()` reads them, also from earlier sessions.
+   */
+  readonly persist?:
+    | {
+        /**
+         * @summary The largest number of stored entries. The default is 1000.
+         */
+        readonly maxEntries?: number;
+        /**
+         * @summary The lowest level to store. The default is `INFO`.
+         */
+        readonly minLevel?: LogLevel;
+      }
+    | false;
+  /**
    * @summary Writes the entries at or above this level to the console as well.
    * @description The default is `false`: no console output.
    */
@@ -705,6 +792,18 @@ export interface LoggerControl {
      * ```
      */
     unbindSink(): void;
+    /**
+     * @summary Returns the stored entries, from this session and earlier sessions.
+     * @description Without Storage, it returns the entries in memory.
+     * @example
+     * The errors of the last session
+     * ```ts
+     * const errors = (await commands.history()).filter((entry) => entry.level === 'ERROR');
+     * ```
+     * @param {number} [limit] The largest number of entries, newest kept.
+     * @returns {Promise<LogEntry[]>} The entries, oldest first.
+     */
+    history(limit?: number): Promise<LogEntry[]>;
   };
   /**
    * @summary The views of the Logger.
@@ -804,6 +903,10 @@ export function createLogger(
   const entries = createRingBuffer<LogEntry>(options.maxEntries ?? 1000);
   const traces = createRingBuffer<TraceRecord>(options.maxTraces ?? 200);
   const sink = new LateBinding<LogEntry>({ capacity: options.sinkCapacity ?? 500 });
+  const persist = options.persist === false ? null : (options.persist ?? {});
+  // Entries for Storage, buffered until Storage runs.
+  const storedSink = new LateBinding<LogEntry>({ capacity: options.sinkCapacity ?? 500 });
+  let stored: StoredLog | null = null;
   let nextId = 0;
   /** The running Logger's internals, shared by `init` and `control`. */
   let api: {
@@ -821,6 +924,7 @@ export function createLogger(
     requires: [
       { target: 'queue', kind: 'optional' },
       { target: 'notification', kind: 'optional' },
+      { target: 'storage', kind: 'optional' },
     ],
     state: {
       initial: {
@@ -912,6 +1016,11 @@ export function createLogger(
         if (mirror !== false && LEVEL_RANK[level] >= LEVEL_RANK[mirror]) {
           console[CONSOLE_METHOD[level]](formatEntry(entry));
         }
+        if (persist && LEVEL_RANK[level] >= LEVEL_RANK[persist.minLevel ?? 'INFO']) {
+          void Promise.resolve(storedSink.write(entry)).catch((error: unknown) =>
+            ctx.report(error),
+          );
+        }
         try {
           void Promise.resolve(sink.write(entry)).catch((error: unknown) => ctx.report(error));
         } catch (error) {
@@ -922,7 +1031,27 @@ export function createLogger(
       api = { log, enabled };
 
       const stops = [follow('queue', 'packet'), follow('notification', 'broadcast')];
+      if (persist) {
+        stops.push(
+          ctx.watch<LogStorage>('storage', (storage) => {
+            if (!storage) {
+              stored = null;
+              storedSink.unbind();
+              return;
+            }
+            const collection = storage.commands.collection({
+              name: LOG_COLLECTION,
+              maxEntries: persist.maxEntries ?? 1000,
+            });
+            stored = collection;
+            storedSink
+              .bind((entry) => collection.set(`${entry.sessionId}:${entry.id}`, entry))
+              .catch((error: unknown) => ctx.report(error));
+          }),
+        );
+      }
       return () => {
+        stored = null;
         for (const stop of stops) stop();
         api = null;
       };
@@ -988,6 +1117,12 @@ export function createLogger(
           unbindSink() {
             sink.unbind();
             ctx.state.update((s) => void (s.sinkBound = false));
+          },
+          async history(limit?: number) {
+            const all = stored
+              ? (await stored.entries()).map((row) => row.value)
+              : entries.toArray();
+            return limit === undefined ? all : all.slice(-limit);
           },
         },
         views: { state: ctx.state.readable, entries: entries.view, traces: traces.view },

@@ -79,9 +79,11 @@ import {
 } from '@platform/core';
 
 import {
+  DEAD_LETTER_COLLECTION,
   QUEUE_ID,
   QueueRejectedError,
   type AdmissionControl,
+  type CollectionSource,
   type DeadLetter,
   type FanOut,
   type FanOutOptions,
@@ -90,6 +92,7 @@ import {
   type QueueOptions,
   type RejectionReason,
   type SettledPacket,
+  type StoredCollection,
 } from './types';
 
 /**
@@ -218,6 +221,8 @@ export function createQueue(options: QueueOptions = {}): Queue {
   let active = 0;
   /** The kernel routing through the Queue, for replays. */
   let lastKernel: Kernel | null = null;
+  // The Storage collection of dead letters, while Storage runs.
+  let stored: StoredCollection<DeadLetter> | null = null;
 
   const waiting = () => TIERS.reduce((sum, tier) => sum + tiers.get(tier)!.length, 0);
   const counters = (update?: (s: QueueData) => void) =>
@@ -480,7 +485,10 @@ export function createQueue(options: QueueOptions = {}): Queue {
     id: QUEUE_ID,
     scope: 'tab',
     kind: 'centralized',
-    requires: [{ target: 'global-state', kind: 'optional' }],
+    requires: [
+      { target: 'global-state', kind: 'optional' },
+      { target: 'storage', kind: 'optional' },
+    ],
     state: {
       initial: {
         depth: 0,
@@ -508,7 +516,42 @@ export function createQueue(options: QueueOptions = {}): Queue {
       stopped = false;
       suspended = false;
       pump();
+      // With Storage, dead letters survive a reload: load the stored ones, then store new ones.
+      const stopStorage =
+        options.persistDeadLetters === false
+          ? () => {}
+          : ctx.watch<CollectionSource>('storage', (storage) => {
+              if (!storage) {
+                stored = null;
+                sink.unbind();
+                return;
+              }
+              const collection = storage.commands.collection<DeadLetter>({
+                name: DEAD_LETTER_COLLECTION,
+                maxEntries: deadLetterCapacity,
+              });
+              stored = collection;
+              collection
+                .entries()
+                .then((rows) => {
+                  const current = deadLetters.view.getSnapshot();
+                  const known = new Set(current.map((l) => l.envelope.metadata.messageId));
+                  const restored = rows
+                    .map((row) => row.value)
+                    .filter((letter) => !known.has(letter.envelope.metadata.messageId));
+                  if (restored.length > 0) {
+                    deadLetters.set([...restored, ...current].slice(-deadLetterCapacity));
+                    counters();
+                  }
+                  return sink.bind((letter) =>
+                    collection.set(letter.envelope.metadata.messageId, letter),
+                  );
+                })
+                .catch((error: unknown) => ctx.report(error));
+            });
       return () => {
+        stopStorage();
+        stored = null;
         stopped = true;
         drain();
         counters();
@@ -531,6 +574,7 @@ export function createQueue(options: QueueOptions = {}): Queue {
           const kernel = lastKernel;
           if (!kernel) return false;
           deadLetters.set(letters.filter((l) => l !== letter));
+          stored?.delete(messageId).catch((error: unknown) => ctx.report(error));
           const { ttl: _ttl, ...metadata } = letter.envelope.metadata;
           const envelope: PacketEnvelope = {
             ...letter.envelope,

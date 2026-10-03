@@ -21,9 +21,14 @@
   "devDependencies": {
     "@platform/core": "workspace:*",
     "@platform/crypto": "workspace:*",
-    "@platform/notification": "workspace:*",
+    "@platform/logger": "workspace:*",
     "@platform/queue": "workspace:*",
     "zod": "^4.6.5"
   },
-  "license": "ISC"
+  "license": "ISC",
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  }
 }

@@ -348,9 +348,9 @@ importers:
       '@platform/crypto':
         specifier: workspace:*
         version: link:../crypto
-      '@platform/notification':
+      '@platform/logger':
         specifier: workspace:*
-        version: link:../notification
+        version: link:../logger
       '@platform/queue':
         specifier: workspace:*
         version: link:../queue

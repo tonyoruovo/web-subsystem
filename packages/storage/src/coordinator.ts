@@ -530,6 +530,8 @@ export function createCoordinator(
   /** Deletes the oldest entries of a collection above its `maxEntries`. */
   async function trim(spec: CollectionSpec) {
     if (spec.maxEntries === null) return;
+    // Counting is cheap; read the entries only when there are too many.
+    if ((await active().backend.count(prefixOf(spec))) <= spec.maxEntries) return;
     const rows = await active().backend.query({ prefix: prefixOf(spec) });
     if (rows.length <= spec.maxEntries) return;
     rows.sort((a, b) => a.envelope.written_at - b.envelope.written_at);

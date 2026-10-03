@@ -37,6 +37,7 @@
 
 import type {
   BackoffStrategy,
+  ControlInterface,
   FingerprintTrail,
   Importance,
   Kernel,
@@ -218,6 +219,12 @@ export interface QueueOptions {
    */
   readonly deadLetterCapacity?: number;
   /**
+   * @summary Keeps the dead letters in Storage when Storage runs, so they survive a reload.
+   * @description The default is `true`. The Queue then binds the dead-letter
+   * sink itself. Set `false` to bind your own sink.
+   */
+  readonly persistDeadLetters?: boolean;
+  /**
    * @summary The number of settled packets that the `trails` view keeps.
    * @description The default is 50.
    */
@@ -315,8 +322,9 @@ export class QueueRejectedError extends Error {
  * after the last retry, or `expired`), `attempts` counts deliveries tried,
  * and `failedAt` is when it was given up.
  *
- * Dead letters are kept in memory and written to the sink bound with
- * `bindDeadLetterSink` (Storage, from M6). `replay(messageId)` sends one again.
+ * Dead letters are kept in memory. When Storage runs, the Queue also keeps
+ * them in the collection `queue.dead-letters`, so they survive a reload.
+ * `replay(messageId)` sends one again.
  *
  * @example
  * Example 1: Listing dead letters
@@ -470,7 +478,7 @@ export interface QueueData {
  *
  * @description
  * `replay(messageId)` sends a dead letter again; `bindDeadLetterSink(sink)`
- * writes buffered and future dead letters to a sink (Storage, from M6);
+ * writes buffered and future dead letters to a sink (with Storage, the Queue binds it itself);
  * `unbindDeadLetterSink()` goes back to buffering; `observe(observer)` calls
  * `observer` with every settled packet (the `trails` view keeps only the last
  * ones, so a log must observe) and returns the function that stops it;
@@ -480,9 +488,9 @@ export interface QueueData {
  * `trails` (recently settled packets) and `deadLetters`.
  *
  * @example
- * Example 1: Persisting dead letters once Storage runs
+ * Example 1: Sending dead letters to your own log (with `persistDeadLetters: false`)
  * ```ts
- * await queue.commands.bindDeadLetterSink((letter) => storage.commands.append('dead-letters', letter));
+ * await queue.commands.bindDeadLetterSink((letter) => myLog.write(letter));
  * ```
  *
  * @example
@@ -518,7 +526,7 @@ export interface QueueControl {
      * @example
      * Persisting dead letters
      * ```ts
-     * await commands.bindDeadLetterSink((letter) => storage.commands.append('dead-letters', letter));
+     * await commands.bindDeadLetterSink((letter) => myLog.write(letter));
      * ```
      * @param {(letter: DeadLetter) => void | Promise<void>} sink Receives each dead letter.
      * @returns {Promise<void>} Resolves after the buffer drains.
@@ -578,5 +586,87 @@ export interface QueueControl {
      * @summary The dead letters in memory, oldest first.
      */
     readonly deadLetters: View<readonly DeadLetter[]>;
+  };
+}
+
+/**
+ * @summary The name of the Storage collection that keeps the dead letters.
+ * @public
+ */
+export const DEAD_LETTER_COLLECTION = 'queue.dead-letters';
+
+/**
+ * @summary The part of a Storage collection that the Queue uses.
+ * @description The Queue does not import `@platform/storage`. Any control
+ * with this shape works.
+ * @template T The type of the values.
+ * @public
+ */
+export interface StoredCollection<T> {
+  /**
+   * @summary Writes a value.
+   * @example
+   * Writing
+   * ```ts
+   * await collection.set(letter.envelope.metadata.messageId, letter);
+   * ```
+   * @param {string} key The key.
+   * @param {T} value The value.
+   * @returns {Promise<void>} Resolves when the value is stored.
+   */
+  set(key: string, value: T): Promise<void>;
+  /**
+   * @summary Deletes a value.
+   * @example
+   * Deleting after a replay
+   * ```ts
+   * await collection.delete(messageId);
+   * ```
+   * @param {string} key The key.
+   * @returns {Promise<void>} Resolves when the value is deleted.
+   */
+  delete(key: string): Promise<void>;
+  /**
+   * @summary Returns all the entries, oldest first.
+   * @example
+   * Loading after a reload
+   * ```ts
+   * const letters = (await collection.entries()).map((entry) => entry.value);
+   * ```
+   * @returns {Promise<Array<{ key: string; value: T }>>} The entries.
+   */
+  entries(): Promise<Array<{ key: string; value: T }>>;
+}
+
+/**
+ * @summary The part of the Storage control that the Queue and the Logger use.
+ * @example
+ * Example 1: Watching Storage
+ * ```ts
+ * ctx.watch<CollectionSource>('storage', (storage) => storage?.commands.collection({ name: 'x' }));
+ * ```
+ * @example
+ * Example 2: A fake for a test
+ * ```ts
+ * const source: CollectionSource = { commands: { collection: () => memoryCollection() }, views: {} };
+ * ```
+ * @public
+ */
+export interface CollectionSource extends ControlInterface {
+  /**
+   * @summary The commands that the Queue uses.
+   */
+  readonly commands: {
+    /**
+     * @summary Returns a collection.
+     * @example
+     * Getting the collection of dead letters
+     * ```ts
+     * storage.commands.collection<DeadLetter>({ name: DEAD_LETTER_COLLECTION, maxEntries: 100 });
+     * ```
+     * @param definition The name and the largest number of entries.
+     * @returns {StoredCollection<T>} The collection.
+     */
+    collection<T>(definition: { name: string; maxEntries?: number }): StoredCollection<T>;
   };
 }

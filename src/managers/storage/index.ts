@@ -1,4 +1,3 @@
-export * from './backends';
 export * from './migration';
 export * from './storage.broadcaster';
 export * from './storage.facade';

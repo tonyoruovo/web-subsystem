@@ -340,6 +340,24 @@ importers:
         specifier: workspace:*
         version: link:../notification
 
+  packages/storage:
+    devDependencies:
+      '@platform/core':
+        specifier: workspace:*
+        version: link:../core
+      '@platform/crypto':
+        specifier: workspace:*
+        version: link:../crypto
+      '@platform/notification':
+        specifier: workspace:*
+        version: link:../notification
+      '@platform/queue':
+        specifier: workspace:*
+        version: link:../queue
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':

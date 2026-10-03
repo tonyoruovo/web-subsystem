@@ -32,3 +32,4 @@ coverage/
 generated/
 bin/
 .examples/
+.vitest-attachments/

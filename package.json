@@ -20,7 +20,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs && pnpm check:examples && pnpm test",
     "docs": "typedoc",
     "check:docs": "node scripts/check-docs.ts",
-    "check:examples": "node scripts/check-examples.ts"
+    "check:examples": "node scripts/check-examples.ts",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs"
   },
   "keywords": [
     "web",

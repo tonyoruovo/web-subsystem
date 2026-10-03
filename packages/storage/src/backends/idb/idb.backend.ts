@@ -381,6 +381,7 @@ export class IDBBackend implements IStorageBackend<string> {
       expires_at: envelope.expires_at,
       weight: envelope.weight,
       backend: envelope.backend,
+      ...(envelope.integrity === undefined ? {} : { integrity: envelope.integrity }),
     };
 
     if (options?.transactionId) {
@@ -855,6 +856,7 @@ export class IDBBackend implements IStorageBackend<string> {
       expires_at: record.expires_at,
       weight: record.weight,
       backend: record.backend,
+      ...(record.integrity === undefined ? {} : { integrity: record.integrity }),
     };
   }
 

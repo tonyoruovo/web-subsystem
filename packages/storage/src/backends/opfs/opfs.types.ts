@@ -110,6 +110,10 @@ export interface ManifestEntry {
    * @summary Byte length of the stored payload. Used for quota estimation without opening the file.
    */
   byteLength: number;
+  /**
+   * @summary The HMAC tag of the payload, when the collection is encrypted.
+   */
+  integrity?: string;
 }
 
 /**

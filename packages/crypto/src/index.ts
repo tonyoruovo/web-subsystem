@@ -12,6 +12,7 @@
  *   +-- createCryptoProcessor   the processor module (shared worker, dedicated worker, main thread)
  *   +-- KeyStore                non-extractable keys, persisted in IndexedDB
  *   +-- KeySource, KeyMaterial  device keys, injected keys, fetched keys
+ *   +-- cipher functions        encryptText, decryptText, hmacText, verifyHmacText (Storage uses them)
  *   +-- encodings               utf8, base64url, hex
  *   @platform/crypto/worker     the worker entry that serves the processor
  *   ```
@@ -36,6 +37,7 @@
  * @author MathAid
  */
 
+export * from './cipher';
 export * from './crypto';
 export * from './encoding';
 export * from './keys';

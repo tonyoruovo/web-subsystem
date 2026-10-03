@@ -419,6 +419,7 @@ export class OPFSBackend implements IStorageBackend<string> {
       backend: envelope.backend,
       filePath,
       byteLength: payloadBytes.byteLength,
+      ...(envelope.integrity === undefined ? {} : { integrity: envelope.integrity }),
     };
 
     if (options?.transactionId) {
@@ -486,6 +487,7 @@ export class OPFSBackend implements IStorageBackend<string> {
       expires_at: meta.expires_at,
       weight: meta.weight,
       backend: meta.backend,
+      ...(meta.integrity === undefined ? {} : { integrity: meta.integrity }),
     };
   }
 
@@ -611,6 +613,7 @@ export class OPFSBackend implements IStorageBackend<string> {
             expires_at: meta.expires_at,
             weight: meta.weight,
             backend: meta.backend,
+            ...(meta.integrity === undefined ? {} : { integrity: meta.integrity }),
           },
         });
       } catch {

@@ -127,6 +127,10 @@ export interface IDBRecord {
    * @summary Which backend wrote this entry. Always `'indexeddb'` for this backend's writes.
    */
   backend: BackendKind;
+  /**
+   * @summary The HMAC tag of the payload, when the collection is encrypted.
+   */
+  integrity?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

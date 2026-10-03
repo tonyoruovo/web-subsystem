@@ -38,7 +38,8 @@
 
 import { defineProcessor, type ProcessorModule } from '@platform/core';
 
-import { fromBase64Url, fromUtf8, toBase64Url, toHex, utf8 } from './encoding';
+import { decryptText, encryptText, hmacText, verifyHmacText } from './cipher';
+import { fromBase64Url, toBase64Url, toHex, utf8 } from './encoding';
 import { KeyStore, type CryptoConfig, type KeyPurpose } from './keys';
 
 /**
@@ -165,30 +166,6 @@ export interface CryptoStatus {
 }
 
 /**
- * @summary Thrown when a token, tag or signature names a key that the store does not have.
- *
- * @example
- * Example 1: Data from before `forget`
- * ```ts
- * await crypto.commands.decrypt(oldToken); // UnknownKeyError
- * ```
- *
- * @example
- * Example 2: Telling it apart from a damaged token
- * ```ts
- * catch (error) { if (error instanceof UnknownKeyError) markUnreadable(); }
- * ```
- *
- * @public
- */
-export class UnknownKeyError extends Error {
-  /**
-   * @summary The name of the error class: `'UnknownKeyError'`.
-   */
-  override readonly name = 'UnknownKeyError';
-}
-
-/**
  * @summary Options for {@linkcode createCryptoProcessor}.
  * @public
  */
@@ -246,13 +223,6 @@ export function createCryptoProcessor(
     if (!keys) throw new Error('The Crypto processor is not set up.');
     return keys;
   };
-  const named = (id: string, purpose: KeyPurpose) => {
-    const record = store().get(id);
-    if (!record || record.purpose !== purpose)
-      throw new UnknownKeyError(`No ${purpose} key "${id}".`);
-    return record;
-  };
-
   return defineProcessor<CryptoRequest, unknown>({
     async setup(_scope, value) {
       config = (value as CryptoConfig | undefined) ?? { source: { kind: 'device' } };
@@ -261,40 +231,14 @@ export function createCryptoProcessor(
 
     async handle(request) {
       switch (request.op) {
-        case 'encrypt': {
-          const { id, key } = store().active('encrypt');
-          const iv = crypto.getRandomValues(new Uint8Array(12));
-          const ciphertext = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            utf8(request.data),
-          );
-          return `v1.${id}.${toBase64Url(iv)}.${toBase64Url(new Uint8Array(ciphertext))}`;
-        }
-        case 'decrypt': {
-          const [version, id, iv, ciphertext] = request.token.split('.');
-          if (version !== 'v1' || !id || !iv || !ciphertext) {
-            throw new Error('The token is not in the "v1.<keyId>.<iv>.<ciphertext>" format.');
-          }
-          const { key } = named(id, 'encrypt');
-          const plain = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: fromBase64Url(iv) },
-            key,
-            fromBase64Url(ciphertext),
-          );
-          return fromUtf8(new Uint8Array(plain));
-        }
-        case 'hmac': {
-          const { id, key } = store().active('hmac');
-          const tag = await crypto.subtle.sign('HMAC', key, utf8(request.data));
-          return `${id}.${toBase64Url(new Uint8Array(tag))}`;
-        }
-        case 'verify-hmac': {
-          const [id, tag] = split(request.tag, 'tag');
-          const record = store().get(id);
-          if (!record || record.purpose !== 'hmac') return false;
-          return crypto.subtle.verify('HMAC', record.key, fromBase64Url(tag), utf8(request.data));
-        }
+        case 'encrypt':
+          return encryptText(store(), request.data);
+        case 'decrypt':
+          return decryptText(store(), request.token);
+        case 'hmac':
+          return hmacText(store(), request.data);
+        case 'verify-hmac':
+          return verifyHmacText(store(), request.data, request.tag);
         case 'sign': {
           const { id, key } = store().active('sign');
           const signature = await crypto.subtle.sign(

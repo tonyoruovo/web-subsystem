@@ -146,7 +146,7 @@ No code is written until both steps are done.
 - Dead letters and Logger buffers now persist through Storage
 - The old Crypto and Storage code in `src/managers` is ported and deleted
 
-**Gate:** with the shared worker killed during a write, storage fails over without data loss (browser test).
+**Gate:** with the shared worker killed during a write, storage fails over without data loss (browser test). _Done 2026-10-03: `packages/storage/test/storage.browser.spec.ts` closes the shared worker when it receives a write; the runner runs the write again on the main thread, and every entry is there, in Chrome, Chromium and Edge. WebKit runs the coordinator on the main thread from the start (§18.2)._
 
 ### M7 — Connectivity: Network, Auth, Sync, Realtime
 

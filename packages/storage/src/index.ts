@@ -44,6 +44,7 @@
 export * from './backends';
 export * from './collection';
 export * from './coordinator';
+export * from './indexes';
 export * from './keys';
 export * from './persistence';
 export * from './pipeline';

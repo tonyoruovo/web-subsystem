@@ -38,6 +38,7 @@ import {
   type KeyStore,
 } from '@platform/crypto';
 
+import type { IndexFunction } from './indexes';
 import type { BackendKind, StorageEnvelope } from './types';
 
 /**
@@ -111,6 +112,10 @@ export interface CollectionSpec {
    * value. A missing step keeps the value as it is.
    */
   readonly migrations?: Readonly<Record<number, Migration>>;
+  /**
+   * @summary The query indexes, by name. Each function returns the index value (or values) of a value.
+   */
+  readonly indexes?: Readonly<Record<string, IndexFunction>>;
 }
 
 /**

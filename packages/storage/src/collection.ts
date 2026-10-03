@@ -27,6 +27,7 @@
 import { toPortable } from '@platform/core';
 
 import type { BatchOperation, ListResult, ReadResult, StorageRequest } from './coordinator';
+import type { IndexFunction, IndexValue } from './indexes';
 import type { CollectionSpec, Migration } from './pipeline';
 
 /**
@@ -172,6 +173,16 @@ export interface CollectionDefinition<T> {
    * @summary Turns text back into a value. The default is `JSON.parse`.
    */
   readonly deserialize?: (text: string) => T;
+  /**
+   * @summary Query indexes, by name. Each function returns the index value of a value, or an array for several.
+   * @description `lookup(name, value)` then finds entries without reading
+   * the whole collection. The functions run in the coordinator, so they must
+   * be self-contained. In an encrypted collection, the index stores an HMAC
+   * of each value, not the value. After a change to the functions, call `reindex()`.
+   */
+  readonly indexes?: Readonly<
+    Record<string, (value: T) => IndexValue | readonly IndexValue[] | null | undefined>
+  >;
 }
 
 /**
@@ -283,6 +294,20 @@ export interface CollectionHost {
    */
   corrupt(collection: string, key: string, reason: string): void;
   /**
+   * @summary Refuses a write that Storage must not do now.
+   * @description Storage refuses encrypted writes while its keys do not match the keys of Crypto.
+   * @example
+   * Checking before a write
+   * ```ts
+   * host.assertWritable('vault', true);
+   * ```
+   * @param {string} collection The collection.
+   * @param {boolean} encrypted Tells if the write is encrypted.
+   * @returns {void}
+   * @throws {Error} When the write is refused.
+   */
+  assertWritable(collection: string, encrypted: boolean): void;
+  /**
    * @summary Listens to the changes of one collection.
    * @example
    * Listening
@@ -386,6 +411,13 @@ export class Collection<T> {
         `[storage] The collection name "${definition.name}" may use only letters, digits, "_", "." and "-".`,
       );
     }
+    for (const index of Object.keys(definition.indexes ?? {})) {
+      if (!/^[\w.-]+$/.test(index)) {
+        throw new Error(
+          `[storage] The index name "${index}" may use only letters, digits, "_", "." and "-".`,
+        );
+      }
+    }
     this.name = definition.name;
     this.#schema = definition.schema;
     this.#host = host;
@@ -402,6 +434,9 @@ export class Collection<T> {
         : {}),
       ...(definition.deserialize ? { deserialize: definition.deserialize } : {}),
       ...(definition.migrations ? { migrations: definition.migrations } : {}),
+      ...(definition.indexes
+        ? { indexes: definition.indexes as Readonly<Record<string, IndexFunction>> }
+        : {}),
     };
     specs.set(this, this.#spec);
   }
@@ -472,6 +507,7 @@ export class Collection<T> {
     options: { ttl?: number | null; weight?: number } = {},
   ): Promise<void> {
     const valid = this.validate(key, value);
+    this.#host.assertWritable(this.name, this.#spec.encrypt);
     await this.#call({ op: 'set', spec: this.#spec, key, value: valid, ...options });
     this.#host.changed({ collection: this.name, key, op: 'set' });
   }
@@ -524,8 +560,61 @@ export class Collection<T> {
       limit: options.limit,
       offset: options.offset,
     });
-    for (const key of result.corrupt)
+    return this.#accept(result);
+  }
+
+  /**
+   * @summary Returns the entries whose index has a value, oldest write first.
+   * @description It reads only the matching entries, not the whole collection.
+   * @example
+   * The open orders
+   * ```ts
+   * const open = await orders.lookup('status', 'open', { limit: 20 });
+   * ```
+   * @param {string} index The name of the index.
+   * @param {IndexValue} value The value to find.
+   * @param {EntriesOptions<T>} [options] A filter and a page.
+   * @returns {Promise<Array<{ key: string; value: T }>>} The entries.
+   * @throws {Error} When the collection has no index with this name.
+   */
+  async lookup(
+    index: string,
+    value: IndexValue,
+    options: EntriesOptions<T> = {},
+  ): Promise<Array<{ key: string; value: T }>> {
+    if (!this.#spec.indexes?.[index]) {
+      throw new Error(`[storage] The collection "${this.name}" has no index "${index}".`);
+    }
+    const result = await this.#call<ListResult>({
+      op: 'lookup',
+      spec: this.#spec,
+      index,
+      value,
+      where: options.where as ((value: unknown, key: string) => boolean) | undefined,
+      limit: options.limit,
+      offset: options.offset,
+    });
+    return this.#accept(result);
+  }
+
+  /**
+   * @summary Builds all index entries again. Call it after a change to the index functions.
+   * @example
+   * After a new index
+   * ```ts
+   * await orders.reindex(); // 120
+   * ```
+   * @returns {Promise<number>} The number of entries indexed.
+   */
+  reindex(): Promise<number> {
+    return this.#call<number>({ op: 'reindex', spec: this.#spec });
+  }
+
+  /** Validates the entries of a list result, and announces the corrupt ones. */
+  #accept(result: ListResult): Array<{ key: string; value: T }> {
+    for (const key of result.corrupt) {
       this.#host.corrupt(this.name, key, 'The entry does not decode.');
+    }
     const entries: Array<{ key: string; value: T }> = [];
     for (const entry of result.entries) {
       try {

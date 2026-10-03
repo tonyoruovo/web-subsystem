@@ -35,7 +35,12 @@ import {
   toPortable,
   type View,
 } from '@platform/core';
-import { CRYPTO_KEYS_CHANGED, type CryptoConfig } from '@platform/crypto';
+import {
+  CRYPTO_ID,
+  CRYPTO_KEYS_CHANGED,
+  type CryptoConfig,
+  type CryptoControl,
+} from '@platform/crypto';
 
 import {
   Batch,
@@ -75,6 +80,31 @@ export const STORAGE_QUOTA = 'storage:quota';
  * @public
  */
 export const STORAGE_CORRUPT = 'storage:corrupt';
+
+/**
+ * @summary The result of the key check between Storage and Crypto.
+ * @description `match`: both use the same keys. `mismatch`: they do not,
+ * and Storage refuses encrypted writes. `unchecked`: Crypto does not run, or
+ * Storage has no encryption.
+ * @public
+ */
+export type KeyCheck = 'match' | 'mismatch' | 'unchecked';
+
+/**
+ * @summary Storage and Crypto use different keys, so `crypto.forget()` would not erase the data of Storage.
+ * @example
+ * Catching it
+ * ```ts
+ * try { await vault.set('pin', '1234'); } catch (error) { if (error instanceof KeyMismatchError) fixKeyOptions(); }
+ * ```
+ * @public
+ */
+export class KeyMismatchError extends Error {
+  /**
+   * @summary The name of the error: `KeyMismatchError`.
+   */
+  override readonly name = 'KeyMismatchError';
+}
 
 /**
  * @summary The payload of `storage:quota`.
@@ -238,6 +268,10 @@ export interface StorageData {
    * @summary The last quota estimate, or `null` before the first check.
    */
   quota: QuotaEstimate | null;
+  /**
+   * @summary The result of the key check between Storage and Crypto.
+   */
+  keyCheck: KeyCheck;
 }
 
 /**
@@ -367,6 +401,8 @@ export function createStorage(
   // Listeners of each collection. They live as long as the definition.
   const listeners = new Map<string, Set<(change: StorageChange) => void>>();
   let channel: BroadcastChannel | null = null;
+  // Runs the key check while the subsystem runs.
+  let checkKeys: (() => Promise<void>) | null = null;
 
   const deliver = (ctx: UnitContext<StorageData>, change: StorageChange) => {
     const targets =
@@ -391,6 +427,7 @@ export function createStorage(
     scope: 'tab',
     kind: 'featurized',
     processors: [processor],
+    requires: [{ target: CRYPTO_ID, kind: 'optional' }],
     subscribes: [CRYPTO_KEYS_CHANGED],
     state: {
       initial: {
@@ -400,6 +437,7 @@ export function createStorage(
         encryption: config.keys !== null,
         probes: {},
         quota: null,
+        keyCheck: 'unchecked',
       } as StorageData,
       policy: {
         host: readable,
@@ -408,6 +446,7 @@ export function createStorage(
         encryption: readable,
         probes: readable,
         quota: readable,
+        keyCheck: readable,
       },
     },
 
@@ -429,6 +468,33 @@ export function createStorage(
           syncStatus().catch((error: unknown) => ctx.report(error));
       });
       await syncStatus();
+
+      // The key check (docs/ARCHITECTURE.md §18.3): compare key ids, never key sources.
+      checkKeys = async () => {
+        const crypto = ctx.dependency<CryptoControl>(CRYPTO_ID);
+        const active = crypto?.views.state.getSnapshot().active;
+        let result: KeyCheck = 'unchecked';
+        if (config.keys !== null && active) {
+          const status = (await handle.call({ op: 'status' })) as CoordinatorStatus;
+          const ids = status.keyIds;
+          result =
+            ids && ids.encrypt === active.encrypt && ids.hmac === active.hmac
+              ? 'match'
+              : 'mismatch';
+        }
+        const previous = ctx.state.get().keyCheck;
+        ctx.state.update((s) => void (s.keyCheck = result));
+        if (result === 'mismatch' && previous !== 'mismatch') {
+          ctx.report(
+            new KeyMismatchError(
+              '[storage] Storage and Crypto use different keys. Give createStorage the key source of createCrypto. Encrypted writes are refused.',
+            ),
+          );
+        }
+      };
+      const stopCrypto = ctx.watch<CryptoControl>(CRYPTO_ID, () => {
+        checkKeys?.().catch((error: unknown) => ctx.report(error));
+      });
 
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel(`platform-storage:${database}:${config.namespace.domain}`);
@@ -463,6 +529,8 @@ export function createStorage(
       }
 
       return () => {
+        stopCrypto();
+        checkKeys = null;
         stopStatus();
         clearInterval(timer);
         channel?.close();
@@ -473,7 +541,10 @@ export function createStorage(
     receive(packet, ctx) {
       if (packet.header.eventId !== CRYPTO_KEYS_CHANGED) return undefined;
       packet.take();
-      return ctx.processor<StorageRequest, unknown>('coordinator').call({ op: 'reload-keys' });
+      return ctx
+        .processor<StorageRequest, unknown>('coordinator')
+        .call({ op: 'reload-keys' })
+        .then(() => checkKeys?.());
     },
 
     control: (ctx) => {
@@ -492,6 +563,13 @@ export function createStorage(
             .send({ eventId: STORAGE_CORRUPT, payload, importance: 'HIGH' })
             .catch((error: unknown) => ctx.report(error));
         },
+        assertWritable(collection, encrypted) {
+          if (encrypted && ctx.state.get().keyCheck === 'mismatch') {
+            throw new KeyMismatchError(
+              `[storage] An encrypted write to "${collection}" is refused: Storage and Crypto use different keys.`,
+            );
+          }
+        },
         listen(collection, listener) {
           let set = listeners.get(collection);
           if (!set) listeners.set(collection, (set = new Set()));
@@ -506,6 +584,10 @@ export function createStorage(
           async batch(build: (batch: Batch) => void) {
             const batch = new Batch();
             build(batch);
+            for (const operation of batch.operations) {
+              if (operation.op === 'set')
+                host.assertWritable(operation.spec.name, operation.spec.encrypt);
+            }
             if (batch.operations.length === 0) return;
             await handle().call(
               toPortable({ op: 'batch', operations: batch.operations }) as StorageRequest,

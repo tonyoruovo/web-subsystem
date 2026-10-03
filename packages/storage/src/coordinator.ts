@@ -42,6 +42,14 @@ import { IDBBackend } from './backends/idb';
 import { MemoryBackend } from './backends/memory';
 import { OPFSBackend } from './backends/opfs';
 import { LocalStorageBackend, SessionStorageBackend } from './backends/webstorage';
+import {
+  entryOf,
+  indexKeys,
+  indexModule,
+  reverseKey,
+  valueParts,
+  type IndexValue,
+} from './indexes';
 import { buildCanonicalKey } from './keys';
 import { CorruptEntryError, decode, encode, type CollectionSpec } from './pipeline';
 import type {
@@ -274,6 +282,46 @@ export type StorageRequest =
     }
   | {
       /**
+       * @summary Returns the entries whose index has a value. It returns a {@linkcode ListResult}.
+       */
+      readonly op: 'lookup';
+      /**
+       * @summary The collection.
+       */
+      readonly spec: CollectionSpec;
+      /**
+       * @summary The name of the index.
+       */
+      readonly index: string;
+      /**
+       * @summary The value to look up.
+       */
+      readonly value: IndexValue;
+      /**
+       * @summary Keeps the entries for which it returns `true`.
+       */
+      readonly where?: (value: unknown, key: string) => boolean;
+      /**
+       * @summary The largest number of entries.
+       */
+      readonly limit?: number;
+      /**
+       * @summary The number of entries to skip.
+       */
+      readonly offset?: number;
+    }
+  | {
+      /**
+       * @summary Builds all index entries of a collection again. It returns the number of entries indexed.
+       */
+      readonly op: 'reindex';
+      /**
+       * @summary The collection.
+       */
+      readonly spec: CollectionSpec;
+    }
+  | {
+      /**
        * @summary Counts the entries of a collection.
        */
       readonly op: 'count';
@@ -351,12 +399,12 @@ export type StorageRequest =
  * @example
  * Example 1: In a shared worker
  * ```ts
- * // { backend: 'indexeddb', probes: { indexeddb: true }, persistent: true, encryption: true }
+ * // { backend: 'indexeddb', probes: { indexeddb: true }, persistent: true, encryption: true, keyIds: { encrypt: '3f…', hmac: '9a…' }, locks: true }
  * ```
  * @example
  * Example 2: After a failover, with no persistent backend
  * ```ts
- * // { backend: 'memory', probes: { indexeddb: false, opfs: false, ... , memory: true }, persistent: false, encryption: false }
+ * // { backend: 'memory', probes: { indexeddb: false, opfs: false, ... , memory: true }, persistent: false, encryption: false, keyIds: null, locks: true }
  * ```
  * @public
  */
@@ -377,6 +425,24 @@ export interface CoordinatorStatus {
    * @summary Tells if encryption is configured.
    */
   readonly encryption: boolean;
+  /**
+   * @summary The ids of the active encryption and HMAC keys, or `null` when the keys are not open.
+   * @description Storage compares them with the state of Crypto (the key check).
+   */
+  readonly keyIds: {
+    /**
+     * @summary The id of the active encryption key.
+     */
+    readonly encrypt: string;
+    /**
+     * @summary The id of the active HMAC key.
+     */
+    readonly hmac: string;
+  } | null;
+  /**
+   * @summary Tells if requests run inside a Web Lock, so more than one coordinator keeps one order.
+   */
+  readonly locks: boolean;
 }
 
 /**
@@ -444,6 +510,20 @@ export interface CoordinatorOptions {
   readonly indexedDB?: IDBFactory | null;
 }
 
+/** The requests that do not change data. They take the Web Lock in `shared` mode. */
+const READ_ONLY: ReadonlySet<StorageRequest['op']> = new Set([
+  'status',
+  'list',
+  'lookup',
+  'count',
+  'estimate',
+]);
+
+/** The Web Locks API, or `null` where it does not exist. */
+function lockManager(): LockManager | null {
+  return (typeof navigator !== 'undefined' && navigator.locks) || null;
+}
+
 function makeBackend(kind: BackendKind, database: string): IStorageBackend<unknown> {
   switch (kind) {
     case 'indexeddb':
@@ -464,7 +544,8 @@ function makeBackend(kind: BackendKind, database: string): IStorageBackend<unkno
 /**
  * @summary Makes the coordinator processor of Storage.
  * @description The worker entry and the virtual host both use it. One
- * request runs at a time, so writes from all tabs apply in order.
+ * request runs at a time, inside a Web Lock where the API exists, so the
+ * writes of all tabs apply in one order, also with more than one coordinator.
  * @example
  * The worker entry
  * ```ts
@@ -525,6 +606,70 @@ export function createCoordinator(
       backend: active().backend.kind,
     });
     await active().backend.write(keyOf(spec, key), envelope);
+    await apply(await indexOps(spec, key, value));
+  }
+
+  type Op = { key: CanonicalKey; envelope?: StorageEnvelope<unknown> };
+  const marker = (spec: CollectionSpec, payload = ''): StorageEnvelope<unknown> => ({
+    payload: `:${payload}`,
+    schema_version: 0,
+    written_at: Date.now(),
+    expires_at: null,
+    weight: spec.weight,
+    backend: active().backend.kind,
+  });
+  const indexSpec = (spec: CollectionSpec): CollectionSpec => ({
+    ...spec,
+    name: indexModule(spec.name),
+  });
+
+  /**
+   * Returns the operations that make the index entries of one entry match its new value
+   * (`undefined` for a delete). It reads the reverse entry, never the old value.
+   * A batch passes `pending`: the reverse entries that its earlier operations changed.
+   */
+  async function indexOps(
+    spec: CollectionSpec,
+    key: string,
+    value: unknown,
+    pending?: Map<CanonicalKey, string[]>,
+  ): Promise<Op[]> {
+    const index = indexSpec(spec);
+    const reverse = keyOf(index, reverseKey(key));
+    const old = pending?.has(reverse)
+      ? null
+      : await active().backend.read(reverse, { respectTtl: false });
+    const before: string[] =
+      pending?.get(reverse) ??
+      (old && typeof old.payload === 'string'
+        ? (JSON.parse(old.payload.slice(1)) as string[])
+        : []);
+    if (!spec.indexes && before.length === 0) return [];
+    const after =
+      value === undefined || !spec.indexes
+        ? []
+        : await indexKeys(spec.indexes, key, value, spec.encrypt ? await keyStore(true) : null);
+    const ops: Op[] = [];
+    for (const k of before) if (!after.includes(k)) ops.push({ key: keyOf(index, k) });
+    for (const k of after)
+      if (!before.includes(k)) ops.push({ key: keyOf(index, k), envelope: marker(spec) });
+    if (after.length > 0) ops.push({ key: reverse, envelope: marker(spec, JSON.stringify(after)) });
+    else if (old || pending?.has(reverse)) ops.push({ key: reverse });
+    pending?.set(reverse, after);
+    return ops;
+  }
+
+  async function apply(ops: readonly Op[], transactionId?: string) {
+    for (const { key, envelope } of ops) {
+      if (envelope) await active().backend.write(key, envelope, { transactionId });
+      else await active().backend.delete(key, { transactionId });
+    }
+  }
+
+  /** Deletes an entry and its index entries. */
+  async function remove(spec: CollectionSpec, key: string) {
+    await active().backend.delete(keyOf(spec, key));
+    await apply(await indexOps(spec, key, undefined));
   }
 
   /** Deletes the oldest entries of a collection above its `maxEntries`. */
@@ -536,7 +681,7 @@ export function createCoordinator(
     if (rows.length <= spec.maxEntries) return;
     rows.sort((a, b) => a.envelope.written_at - b.envelope.written_at);
     for (const row of rows.slice(0, rows.length - spec.maxEntries)) {
-      await active().backend.delete(row.key);
+      await remove(spec, row.key.slice(prefixOf(spec).length));
     }
   }
 
@@ -551,6 +696,7 @@ export function createCoordinator(
         backend: active().backend.kind,
       });
       await active().backend.write(key, fresh);
+      await apply(await indexOps(spec, key.slice(prefixOf(spec).length), decoded.value));
     }
     return decoded.value;
   }
@@ -563,6 +709,12 @@ export function createCoordinator(
           probes: { ...probes },
           persistent: PERSISTENT_BACKENDS.includes(active().backend.kind),
           encryption: active().config.keys !== null,
+          keyIds: await keyStore(false)
+            .then((store) =>
+              store ? { encrypt: store.active('encrypt').id, hmac: store.active('hmac').id } : null,
+            )
+            .catch(() => null),
+          locks: lockManager() !== null,
         } satisfies CoordinatorStatus;
       case 'get': {
         const key = keyOf(request.spec, request.key);
@@ -575,7 +727,7 @@ export function createCoordinator(
           } satisfies ReadResult;
         } catch (error) {
           if (!(error instanceof CorruptEntryError)) throw error;
-          await active().backend.delete(key);
+          await remove(request.spec, request.key);
           return { found: false, corrupt: error.message } satisfies ReadResult;
         }
       }
@@ -584,7 +736,7 @@ export function createCoordinator(
         await trim(request.spec);
         return undefined;
       case 'delete':
-        await active().backend.delete(keyOf(request.spec, request.key));
+        await remove(request.spec, request.key);
         return undefined;
       case 'list': {
         const prefix = prefixOf(request.spec);
@@ -603,7 +755,7 @@ export function createCoordinator(
             value = await read(request.spec, row.key, row.envelope);
           } catch (error) {
             if (!(error instanceof CorruptEntryError)) throw error;
-            await active().backend.delete(row.key);
+            await remove(request.spec, key);
             corrupt.push(key);
             continue;
           }
@@ -616,18 +768,95 @@ export function createCoordinator(
           corrupt,
         } satisfies ListResult;
       }
+      case 'lookup': {
+        const index = indexSpec(request.spec);
+        const parts = await valueParts(
+          request.value,
+          request.spec.encrypt ? await keyStore(true) : null,
+        );
+        const found = new Map<string, CanonicalKey[]>();
+        for (const part of parts) {
+          const prefix = `${prefixOf(index)}${encodeURIComponent(request.index)}:${part}:`;
+          for (const row of await active().backend.query({ prefix })) {
+            const key = entryOf(row.key);
+            found.set(key, [...(found.get(key) ?? []), row.key]);
+          }
+        }
+        const rows: Array<{ key: string; envelope: StorageEnvelope<unknown> }> = [];
+        for (const [key, markers] of found) {
+          const envelope = await active().backend.read(keyOf(request.spec, key));
+          if (envelope) {
+            rows.push({ key, envelope });
+            continue;
+          }
+          // A stale index entry: the entry expired or was deleted without its index.
+          await apply(await indexOps(request.spec, key, undefined));
+          await apply(markers.map((marker) => ({ key: marker })));
+        }
+        rows.sort((a, b) => a.envelope.written_at - b.envelope.written_at);
+        const entries: Array<{ key: string; value: unknown }> = [];
+        const corrupt: string[] = [];
+        for (const row of rows) {
+          let value: unknown;
+          try {
+            value = await read(request.spec, keyOf(request.spec, row.key), row.envelope);
+          } catch (error) {
+            if (!(error instanceof CorruptEntryError)) throw error;
+            await remove(request.spec, row.key);
+            corrupt.push(row.key);
+            continue;
+          }
+          // Check the index again, so a stale index entry never gives a wrong result.
+          const fn = request.spec.indexes?.[request.index];
+          const current = fn ? fn(value) : undefined;
+          const values = Array.isArray(current) ? current : [current];
+          if (fn && !values.includes(request.value)) {
+            await apply(await indexOps(request.spec, row.key, value));
+            continue;
+          }
+          if (request.where && !request.where(value, row.key)) continue;
+          entries.push({ key: row.key, value });
+        }
+        const offset = request.offset ?? 0;
+        return {
+          entries: entries.slice(offset, offset + (request.limit ?? entries.length)),
+          corrupt,
+        } satisfies ListResult;
+      }
+      case 'reindex': {
+        await active().backend.clear(prefixOf(indexSpec(request.spec)));
+        const prefix = prefixOf(request.spec);
+        let indexed = 0;
+        for (const row of await active().backend.query({ prefix })) {
+          const key = row.key.slice(prefix.length);
+          try {
+            const value = await read(request.spec, row.key, row.envelope);
+            await apply(await indexOps(request.spec, key, value));
+            indexed++;
+          } catch (error) {
+            if (!(error instanceof CorruptEntryError)) throw error;
+            await remove(request.spec, key);
+          }
+        }
+        return indexed;
+      }
       case 'count':
         return active().backend.count(prefixOf(request.spec));
       case 'clear':
         await active().backend.clear(prefixOf(request.spec));
+        if (request.spec) await active().backend.clear(prefixOf(indexSpec(request.spec)));
         return undefined;
       case 'batch': {
         // Encode first, so a bad value fails before the transaction opens.
-        const prepared: Array<{ key: CanonicalKey; envelope?: StorageEnvelope<unknown> }> = [];
+        const prepared: Op[] = [];
+        const pending = new Map<CanonicalKey, string[]>();
         for (const operation of request.operations) {
           const key = keyOf(operation.spec, operation.key);
           if (operation.op === 'delete') {
-            prepared.push({ key });
+            prepared.push(
+              { key },
+              ...(await indexOps(operation.spec, operation.key, undefined, pending)),
+            );
             continue;
           }
           const store = await keyStore(operation.spec.encrypt);
@@ -638,13 +867,13 @@ export function createCoordinator(
               backend: active().backend.kind,
             }),
           });
+          prepared.push(
+            ...(await indexOps(operation.spec, operation.key, operation.value, pending)),
+          );
         }
         const tx = await active().backend.beginTransaction();
         try {
-          for (const { key, envelope } of prepared) {
-            if (envelope) await active().backend.write(key, envelope, { transactionId: tx.id });
-            else await active().backend.delete(key, { transactionId: tx.id });
-          }
+          await apply(prepared, tx.id);
           await tx.commit();
         } catch (error) {
           if (active().backend.isTransactionActive(tx.id)) await tx.rollback();
@@ -664,7 +893,7 @@ export function createCoordinator(
             migrated++;
           } catch (error) {
             if (!(error instanceof CorruptEntryError)) throw error;
-            await active().backend.delete(row.key);
+            await remove(request.spec, row.key.slice(prefixOf(request.spec).length));
           }
         }
         return migrated;
@@ -723,7 +952,17 @@ export function createCoordinator(
 
     handle(message) {
       const request = fromPortable<StorageRequest>(message);
-      const next = queue.then(() => run(request));
+      // One order for every coordinator of the origin (docs/ARCHITECTURE.md §18.3).
+      const locks = lockManager();
+      const locked = () =>
+        locks
+          ? locks.request(
+              `platform-storage:${active().config.database}`,
+              { mode: READ_ONLY.has(request.op) ? 'shared' : 'exclusive' },
+              () => run(request),
+            )
+          : run(request);
+      const next = queue.then(locked);
       queue = next.catch(() => undefined);
       return next;
     },

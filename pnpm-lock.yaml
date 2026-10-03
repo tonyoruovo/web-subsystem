@@ -286,6 +286,12 @@ importers:
         specifier: ^4.0.0
         version: 4.6.5
 
+  packages/crypto:
+    devDependencies:
+      '@platform/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/global-state:
     devDependencies:
       '@platform/core':

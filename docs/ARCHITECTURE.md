@@ -679,6 +679,7 @@ This section is the design of milestone M6. It amends the `crypto` and `storage`
 - **Operations.** AES-GCM 256 encryption with the key id in the token, HMAC-SHA-256 tags, ECDSA P-256 signatures with an exportable public key, and SHA-256, SHA-384 and SHA-512 digests.
 - **Rotation.** `rotate(purpose)` makes a new active key. The old keys stay, so old data still decrypts and old tags still verify.
 - **Forgetting.** `forget()` deletes the persisted keys. The data that they encrypted can then never be read again (crypto-shredding). Consent and Auth can use it for an erase request.
+- **WebKit:** a shared worker cannot store a `CryptoKey` in IndexedDB ("The object can not be cloned"). Setup then throws, and the runner fails over to a dedicated worker, which can. The keys are still shared through IndexedDB (found in the M6 browser tests).
 - **Teardown** clears the keys from memory.
 - Dropped for now: key derivation (PBKDF2, HKDF), a rotation timer, and the expiry of old keys.
 

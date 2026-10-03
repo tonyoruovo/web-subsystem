@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ProcessorRunner, WorkerBudget, type HostKind, type ProcessorDef } from '../src';
 
+import { configured, type ConfiguredConfig } from './browser/configured.processor';
 import { doubler, type DoublerInput } from './browser/doubler.processor';
 
 const dedicatedWorker = () =>
@@ -115,5 +116,56 @@ describe('failover triggers', () => {
       host: 'virtual',
       failovers: [{ host: 'dedicated', trigger: 'heartbeat-missed' }],
     });
+  });
+});
+
+describe('processor configuration (ARCHITECTURE §8.7)', () => {
+  const configuredRunner = (config: ConfiguredConfig, hosts: HostKind[]) => {
+    const r = new ProcessorRunner<null, { label: string | null; host: string | null }>(
+      {
+        id: 'configured',
+        job: 'sink',
+        hosts,
+        config,
+        load: async () => configured,
+        dedicated: () =>
+          new Worker(new URL('./browser/configured.worker.ts', import.meta.url), {
+            type: 'module',
+          }),
+        shared: () =>
+          new SharedWorker(new URL('./browser/configured.worker.ts', import.meta.url), {
+            type: 'module',
+            name: `configured-${crypto.randomUUID()}`,
+          }),
+      },
+      { budget: new WorkerBudget(4) },
+    );
+    runners.push(r as never);
+    return r;
+  };
+
+  it('gives the config to setup on every host', async () => {
+    for (const host of ['shared', 'dedicated', 'virtual'] as const) {
+      const r = configuredRunner(
+        { label: `on-${host}` },
+        host === 'virtual' ? ['virtual'] : [host, 'virtual'],
+      );
+      await r.start();
+      await expect(r.call(null)).resolves.toEqual({ label: `on-${host}`, host });
+    }
+  });
+
+  it('fails over when setup refuses a worker host', async () => {
+    const r = configuredRunner({ label: 'refusing', refuseWorkers: true }, [
+      'shared',
+      'dedicated',
+      'virtual',
+    ]);
+    await r.start();
+    await expect(r.call(null)).resolves.toEqual({ label: 'refusing', host: 'virtual' });
+    expect(r.status.getSnapshot().failovers.map((f) => [f.host, f.trigger])).toEqual([
+      ['shared', 'error'],
+      ['dedicated', 'error'],
+    ]);
   });
 });

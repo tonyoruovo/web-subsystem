@@ -172,15 +172,28 @@ export interface ProcessorScope {
 export interface ProcessorModule<In = unknown, Out = unknown> {
   /**
    * @summary Prepares the processor. The host calls it one time, when it starts.
+   * @description `config` is the `config` of the processor definition
+   * (ARCHITECTURE §8.7). A shared worker gets the config of the first tab that
+   * connects. When `setup` throws, the host does not start and the runner
+   * fails over to the next host: use this to refuse a host that cannot do the job.
    * @example
-   * Opening a cache
+   * Example 1: Opening a cache
    * ```ts
    * setup: async () => void (cache = await caches.open('thumbnails')),
    * ```
+   * @example
+   * Example 2: Refusing a host without IndexedDB
+   * ```ts
+   * setup: (scope, config) => {
+   *   if (typeof indexedDB === 'undefined') throw new Error('No IndexedDB on this host.');
+   *   database = (config as { database: string }).database;
+   * },
+   * ```
    * @param {ProcessorScope} scope The scope of the processor.
+   * @param {unknown} [config] The configuration from the processor definition.
    * @returns {void | Promise<void>} Resolves when the processor is ready.
    */
-  setup?(scope: ProcessorScope): void | Promise<void>;
+  setup?(scope: ProcessorScope, config?: unknown): void | Promise<void>;
   /**
    * @summary Handles one message and returns the result.
    * @description The message and the result must be structured-cloneable,
@@ -333,6 +346,12 @@ export interface ProcessorDef<In = unknown, Out = unknown> {
    * @description The default is 5000. After this time, the runner fails over to the next host.
    */
   readonly handshakeTimeoutMs?: number;
+  /**
+   * @summary The configuration that every host gives to `setup` (ARCHITECTURE §8.7).
+   * @description The value must be structured-cloneable, because a worker
+   * host sends it in the handshake. Without it, `setup` gets `undefined`.
+   */
+  readonly config?: unknown;
   /**
    * @summary The heartbeat for worker hosts.
    * @description By default, shared hosts use {@linkcode DEFAULT_SHARED_HEARTBEAT}

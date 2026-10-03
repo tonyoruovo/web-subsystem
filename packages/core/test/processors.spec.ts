@@ -217,6 +217,23 @@ describe('validateProcessorDef', () => {
 });
 
 describe('VirtualHost', () => {
+  it('gives the configuration to setup, and fails to start when setup throws', async () => {
+    const seen: unknown[] = [];
+    const module = {
+      setup: (_scope: unknown, config?: unknown) => {
+        seen.push(config);
+        if ((config as { refuse?: boolean }).refuse) throw new Error('refused');
+      },
+      handle: () => 'ok',
+    };
+    const host = new VirtualHost(async () => module, scheduler, 5, { database: 'app' });
+    await host.start();
+    expect(seen).toEqual([{ database: 'app' }]);
+    await expect(
+      new VirtualHost(async () => module, scheduler, 5, { refuse: true }).start(),
+    ).rejects.toThrow('refused');
+  });
+
   it('runs the module as main-thread tasks and forwards posts', async () => {
     const host = new VirtualHost(async () => doubler, scheduler, 5);
     const posts: unknown[] = [];

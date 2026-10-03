@@ -286,22 +286,24 @@ export class VirtualHost<In, Out> implements Host<In, Out> {
    * @param {() => Promise<ProcessorModule<In, Out>>} load Loads the processor module.
    * @param {Scheduler} scheduler Runs each message as a task, and yields.
    * @param {number} sliceBudgetMs The slice budget (ARCHITECTURE §8.6).
+   * @param {unknown} [config] The configuration for `setup` (ARCHITECTURE §8.7).
    */
   constructor(
     private readonly load: () => Promise<ProcessorModule<In, Out>>,
     private readonly scheduler: Scheduler,
     sliceBudgetMs: number,
+    private readonly config?: unknown,
   ) {
     this.#scope = createSliceScope('virtual', scheduler, sliceBudgetMs, (m) => this.#posts.emit(m));
   }
 
   /**
-   * @summary Loads the module and runs its `setup`.
+   * @summary Loads the module and runs its `setup` with the configuration.
    * @returns {Promise<void>} Resolves once ready. Rejects with whatever `load` or `setup` throws.
    */
   async start(): Promise<void> {
     this.#module = await this.load();
-    await this.#module.setup?.(this.#scope);
+    await this.#module.setup?.(this.#scope, this.config);
   }
 
   /**
@@ -383,6 +385,10 @@ export interface WorkerHostOptions {
    * @description By default, shared hosts have a heartbeat and dedicated hosts do not.
    */
   readonly heartbeat?: HeartbeatOptions | false;
+  /**
+   * @summary The configuration for `setup`, sent in the `hello` handshake (ARCHITECTURE §8.7).
+   */
+  readonly config?: unknown;
 }
 
 /**
@@ -486,7 +492,11 @@ export class WorkerHost<In, Out> implements Host<In, Out> {
     const timeoutMs = this.options.handshakeTimeoutMs ?? 5_000;
     try {
       await Promise.race([
-        endpoint.request('hello', { processor: this.options.processorId }, { timeoutMs }),
+        endpoint.request(
+          'hello',
+          { processor: this.options.processorId, config: this.options.config },
+          { timeoutMs },
+        ),
         failedDuringStart,
       ]);
     } catch (error) {
@@ -630,10 +640,11 @@ export function createHost<In, Out>(
   context: { readonly scheduler: Scheduler; readonly sliceBudgetMs: number },
 ): Host<In, Out> {
   if (kind === 'virtual')
-    return new VirtualHost(def.load, context.scheduler, context.sliceBudgetMs);
+    return new VirtualHost(def.load, context.scheduler, context.sliceBudgetMs, def.config);
   return new WorkerHost(kind, def[kind]!, {
     processorId: def.id,
     handshakeTimeoutMs: def.handshakeTimeoutMs,
     heartbeat: def.heartbeat?.[kind],
+    config: def.config,
   });
 }

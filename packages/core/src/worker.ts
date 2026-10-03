@@ -137,13 +137,15 @@ export function serveProcessor<In, Out>(
     },
   );
   let ready: Promise<void> | null = null;
-  const setup = () => (ready ??= Promise.resolve(module.setup?.(processorScope)));
+  // The first hello brings the config (ARCHITECTURE §8.7). A failed setup fails every handshake.
+  const setup = (config?: unknown) =>
+    (ready ??= Promise.resolve().then(() => module.setup?.(processorScope, config)));
 
   const serve = (port: PortLike) => {
     const endpoint = new RpcEndpoint(port);
     endpoints.add(endpoint);
-    endpoint.handle('hello', async () => {
-      await setup();
+    endpoint.handle('hello', async (data) => {
+      await setup((data as { config?: unknown } | undefined)?.config);
       return { ok: true, host: kind };
     });
     endpoint.handle('call', async (message) => {

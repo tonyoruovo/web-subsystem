@@ -108,10 +108,14 @@ export class PortableFunctionError extends Error {
   override readonly name = 'PortableFunctionError';
 }
 
+/** @summary Any function value. @internal */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFunction = (...args: any[]) => unknown;
+
 /** @summary The functions of this realm, by id. @internal */
-const registry = new Map<string, Function>();
+const registry = new Map<string, AnyFunction>();
 /** @summary The id of each function of this realm that was made portable. @internal */
-const ids = new WeakMap<Function, string>();
+const ids = new WeakMap<AnyFunction, string>();
 /** @summary A unique prefix for the ids of this realm. @internal */
 const realm = Math.random().toString(36).slice(2, 10);
 let next = 0;
@@ -182,7 +186,7 @@ export function isPortableFunction(value: unknown): value is PortableFunction {
 }
 
 /** @summary The source of a function as an expression that evaluates to it. @internal */
-function expression(fn: Function): string {
+function expression(fn: AnyFunction): string {
   const source = Function.prototype.toString.call(fn).trim();
   if (/\{\s*\[native code\]\s*\}$/.test(source)) {
     throw new PortableFunctionError(
@@ -210,7 +214,7 @@ function expression(fn: Function): string {
 }
 
 /** @summary Makes one function portable, registering it in this realm. @internal */
-function portableFunction(fn: Function): PortableFunction {
+function portableFunction(fn: AnyFunction): PortableFunction {
   let id = ids.get(fn);
   if (!id) {
     id = `${realm}-${++next}`;
@@ -251,7 +255,7 @@ function portableFunction(fn: Function): PortableFunction {
  * @public
  */
 export function toPortable<T>(value: T): unknown {
-  if (typeof value === 'function') return portableFunction(value);
+  if (typeof value === 'function') return portableFunction(value as AnyFunction);
   if (Array.isArray(value)) return value.map((item) => toPortable(item));
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toPortable(v)]));

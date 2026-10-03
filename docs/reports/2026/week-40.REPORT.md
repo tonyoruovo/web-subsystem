@@ -11,7 +11,7 @@ This report brings you up to date on the work of this week. The work started on 
 - The kernel (`@platform/core`) and eight subsystem packages are built: Global State, Queue, Notification Center, Logger, Consent, the Window-scope hub, Crypto and Storage.
 - M6 added the data foundation. Crypto keeps non-extractable keys in IndexedDB. Storage keeps data in collections, through one coordinator in a shared worker. The details are in [Crypto and Storage (M6)](#crypto-and-storage-m6).
 - Functions can now cross worker boundaries as portable functions, so a migration or a filter can run in the worker.
-- Every source folder has an `EXAMPLES.md` with runnable examples (67 examples in 16 files). A doc compiler can turn them into code sandboxes. A script runs each one and compares its output.
+- Every source folder has an `EXAMPLES.md` with runnable examples (69 examples in 16 files). A doc compiler can turn them into code sandboxes. A script runs each one and compares its output.
 - A spike found that Safari and all iOS browsers partition the cross-subdomain hub. We changed the design (amendment A11). The details are in [Window scope across subdomains](#window-scope-across-subdomains).
 - Every public member of every interface and class now has its own TSDoc block. A script enforces this rule.
 - All prose now uses ASD-STE100 Simplified Technical English (STE). This report also uses it.
@@ -176,7 +176,7 @@ Run these from the root of the repository:
 | `pnpm install` | Installs the workspace |
 | `pnpm check` | Type-check, lint, format check, `check:docs`, `check:examples`, and all tests. Run it before you push. |
 | `pnpm verify` | Type-check, lint, format check and `check:docs`. Run it before each commit. |
-| `pnpm test:node` | Node tests (1082 tests) |
+| `pnpm test:node` | Node tests (1091 tests) |
 | `pnpm test:browser` | Browser tests, one project for each installed browser |
 | `pnpm test:e2e` | Multi-origin tests with Playwright, for example the Window-scope gate |
 | `pnpm check:docs` | Lists public members whose TSDoc block is missing or incomplete |
@@ -206,9 +206,9 @@ Run these from the root of the repository:
 5. The iframe link and the hub page run only in real browsers, so the Node coverage of `@platform/hub` is about 70%. The e2e gate tests them.
 6. Some older methods, mainly on `Kernel`, have no `@example` yet. Older prose is not yet in STE.
 7. The old managers in `src/managers` stay until their milestones port them.
-8. On WebKit, Storage runs its coordinator on the main thread, because a shared worker there cannot store keys. Two tabs then have two writers. IndexedDB keeps the data consistent, but writes from two tabs are not in one order.
-9. Encryption in Storage needs the same key source as `createCrypto`. Nothing checks that the two options match.
-10. Storage has no query indexes yet. A `where` filter reads the whole collection.
+8. Closed after M6 (ARCHITECTURE §18.3): on WebKit, every tab runs its own Storage coordinator. Each request now runs in a Web Lock of the database, so the writes of all tabs keep one order.
+9. Closed after M6: Storage compares its key ids with the state of Crypto (`keyCheck`). On a mismatch it reports a `KeyMismatchError` and refuses encrypted writes.
+10. Closed after M6: collections can declare query indexes, and `lookup(index, value)` reads only the matching entries. Encrypted collections index an HMAC of each value. Range queries are not supported yet.
 
 ## Next steps
 

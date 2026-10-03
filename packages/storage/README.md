@@ -7,9 +7,10 @@ The **Storage** subsystem (id `storage`, featurized, Tab scope, no required depe
 - **Backends**: IndexedDB, then OPFS, then the Cache API in a worker. On the main thread, also `localStorage`, `sessionStorage` and memory. The coordinator uses the first backend that works.
 - **Pipeline**: serialize, gzip, encrypt (AES-GCM) and an HMAC tag on a write. On a read, the reverse, then migration with write-back. Encryption uses the keys of [`@platform/crypto`](../crypto/README.md).
 - **Validation**: each collection can have a schema (zod, or anything with `safeParse`). The caller's realm validates before a write and after a read, so the full schema always applies.
-- **Collections**: canonical keys (`<domain>:<platform>:<platformVersion>:<module>:<key>`), time to live, eviction weight, a maximum number of entries, and filters that run where the data is.
+- **Collections**: canonical keys (`<domain>:<platform>:<platformVersion>:<module>:<key>`), time to live, eviction weight, a maximum number of entries, query indexes, and filters that run where the data is.
 - **Batches**: writes and deletes on several collections in one backend transaction.
 - **Events**: changes reach every tab (`BroadcastChannel`). A quota monitor warns and evicts. Corrupt entries are reported.
+- **Safety**: a key check confirms that Storage and Crypto use the same keys. A Web Lock keeps one order of writes when more than one coordinator runs.
 
 The coordinator runs in a **shared worker**, then on the main thread (failover). Functions of a collection (migrations, serializers, filters) cross to the worker as **portable functions**. Design: [ARCHITECTURE §18.2](../../docs/ARCHITECTURE.md#182-storage) and the amended [Storage proposal](../../proposals/storage_PROPOSAL.md).
 
@@ -54,6 +55,8 @@ await cart.get('items'); // ['tea']
 cart.subscribe((change) => renderBadge()); // changes from every tab
 
 const vault = commands.collection({ name: 'vault', schema: z.string(), encrypt: true });
+const orders = commands.collection({ name: 'orders', schema: Order, indexes: { status: (o) => o.status } });
+await orders.lookup('status', 'open'); // reads only the open orders
 await commands.batch((batch) => batch.delete(cart, 'items').set(orders, id, order));
 ```
 
@@ -73,6 +76,13 @@ From another subsystem, declare `{ target: 'storage', kind: 'optional' }` in `re
 | `compress`    | `false`          | gzip, for large text values.                                                  |
 | `maxEntries`  | no limit         | A write deletes the oldest entries above the limit.                          |
 | `serialize`, `deserialize` | JSON | Custom text form. They must be self-contained functions.               |
+| `indexes`     | none             | `{ name: (value) => value or values }`. `lookup(name, value)` uses them. Self-contained functions. |
+
+### Collection methods
+
+`get`, `set`, `delete`, `has`, `entries({ where, limit, offset })`, `lookup(index, value, { where, limit, offset })`, `keys`, `count`, `clear`, `migrate`, `reindex` and `subscribe`.
+
+Indexes support equality only. In an encrypted collection, an index stores an HMAC of each value, never the value. After a change to the index functions, call `reindex()`.
 
 ## Behaviour
 
@@ -86,7 +96,10 @@ From another subsystem, declare `{ target: 'storage', kind: 'optional' }` in `re
 | A worker has no persistent backend, or a strict CSP    | The worker refuses, and the coordinator runs on the main thread                                             |
 | WebKit: a shared worker cannot store a `CryptoKey`     | The worker refuses, and the coordinator runs on the main thread                                             |
 | No persistent backend at all (some private windows)    | Memory. `state.persistent` is `false`.                                                                      |
-| Crypto rotates or forgets keys (`crypto:keys-changed`) | The coordinator opens the key store again                                                                  |
+| Crypto rotates or forgets keys (`crypto:keys-changed`) | The coordinator opens the key store again, and the key check runs again                                    |
+| Storage and Crypto use different keys                  | `state.keyCheck` is `mismatch`, a `KeyMismatchError` is reported, and encrypted writes are refused. Reads still work. |
+| More than one coordinator runs (WebKit, or a tab after a failover) | Each request runs in a Web Lock of the database, so the writes of all tabs keep one order       |
+| An index entry points to an expired or deleted entry   | The lookup leaves it out and deletes it                                                                    |
 | Use reaches the warning level (80 %)                   | `storage:quota` with `level: 'warning'`                                                                     |
 | Use reaches the critical level (95 %)                  | Eviction (expired entries, then the lowest weight), then `storage:quota` with `level: 'critical'`          |
 

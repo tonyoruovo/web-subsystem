@@ -313,3 +313,94 @@ key: shop:browser:1:cart:items
 module prefix: shop:browser:1:cart:
 parsed module: cart
 ```
+
+## Find entries by an index
+
+<!-- example id="storage/indexes" runtime="any" -->
+
+An orders page shows the open orders, and a gift view shows the orders with the tag `gift`. Indexes find them without reading every order. An index function returns one value, or an array for several.
+
+```ts file=main.ts
+import { Kernel } from '@platform/core';
+import { STORAGE_ID, createStorage, type StorageControl } from '@platform/storage';
+
+interface Order {
+  status: 'open' | 'paid';
+  tags: string[];
+}
+
+const kernel = new Kernel([
+  createStorage({ domain: 'shop', hosts: ['virtual'], backends: ['memory'], keys: null, quota: false }),
+]);
+await kernel.start();
+const { commands } = kernel.unit<StorageControl>(STORAGE_ID).control!;
+
+const orders = commands.collection<Order>({
+  name: 'orders',
+  indexes: { status: (order) => order.status, tag: (order) => order.tags },
+});
+await orders.set('o1', { status: 'open', tags: ['gift'] });
+await orders.set('o2', { status: 'paid', tags: ['gift', 'rush'] });
+await orders.set('o3', { status: 'open', tags: [] });
+
+console.log('open:', (await orders.lookup('status', 'open')).map((e) => e.key).join(', '));
+console.log('gift:', (await orders.lookup('tag', 'gift')).map((e) => e.key).join(', '));
+
+await orders.set('o1', { status: 'paid', tags: ['gift'] }); // the index follows the new value
+console.log('open now:', (await orders.lookup('status', 'open')).map((e) => e.key).join(', '));
+await kernel.stop();
+```
+
+```text output
+open: o1, o3
+gift: o1, o2
+open now: o3
+```
+
+## Check that Storage and Crypto use the same keys
+
+<!-- example id="storage/key-check" runtime="any" -->
+
+Storage must use the keys of Crypto, so that `crypto.forget()` also erases the encrypted data of Storage. Give both the same key source. Storage compares the key ids, and on a mismatch it refuses encrypted writes.
+
+```ts file=main.ts
+import { Kernel } from '@platform/core';
+import { createCrypto, toBase64Url, type KeySource } from '@platform/crypto';
+import { STORAGE_ID, createStorage, type StorageControl } from '@platform/storage';
+
+// In an app, this material comes from your server. Each key is 32 random bytes.
+const source: KeySource = {
+  kind: 'material',
+  encrypt: toBase64Url(new Uint8Array(32).fill(1)),
+  hmac: toBase64Url(new Uint8Array(32).fill(2)),
+};
+
+async function start(storageSource: KeySource) {
+  const kernel = new Kernel([
+    createCrypto({ hosts: ['virtual'], indexedDB: null, keys: source }),
+    createStorage({ domain: 'notes', hosts: ['virtual'], backends: ['memory'], keys: { source: storageSource }, quota: false }),
+  ]);
+  await kernel.start();
+  await new Promise((resolve) => setTimeout(resolve, 20)); // the check runs after Crypto starts
+  return { kernel, storage: kernel.unit<StorageControl>(STORAGE_ID).control! };
+}
+
+const same = await start(source);
+console.log('same source:', same.storage.views.state.getSnapshot().keyCheck);
+await same.kernel.stop();
+
+const other = await start({ kind: 'material', encrypt: toBase64Url(new Uint8Array(32).fill(9)), hmac: source.hmac });
+console.log('other source:', other.storage.views.state.getSnapshot().keyCheck);
+try {
+  await other.storage.commands.collection<string>({ name: 'vault', encrypt: true }).set('pin', '1234');
+} catch (error) {
+  console.log('encrypted write:', (error as Error).name);
+}
+await other.kernel.stop();
+```
+
+```text output
+same source: match
+other source: mismatch
+encrypted write: KeyMismatchError
+```

@@ -1,3 +1,14 @@
+> **Amendments (M6, 2026-10-03).** These override the text below wherever they conflict. See [ARCHITECTURE §18.2](../docs/ARCHITECTURE.md#182-storage) and [§8.7](../docs/ARCHITECTURE.md#87-processor-configuration-m6).
+>
+> - Storage is a featurized, Tab-scoped subsystem with an optional dependency on Crypto. Its lifecycle is the kernel lifecycle, not `idle | booting | running | winding_down`.
+> - The coordinator is the processor `coordinator` on the hosts shared, then virtual. The backends run inside it. They are not kernel features.
+> - The fallback chain is IndexedDB, OPFS, Cache, then (on the virtual host only) `localStorage`, `sessionStorage` and memory. A worker without a persistent backend refuses to start, so the runner fails over.
+> - Callers use collections (`commands.collection(definition)`), not `registerStore` packets. Validation, serialization, compression and encryption run on the main thread.
+> - Interactive transactions (`begin`, `commit`, `rollback`) become atomic batches (`batch(operations)`).
+> - Change events go to every tab through a `BroadcastChannel`, then to subscribers as the Tab broadcast `storage:changed`. Quota events are `storage:quota`. Integrity failures are `storage:corrupt`.
+> - The kernel's state persistence uses `createStatePersistence()`, which runs on the main thread.
+> - Dropped for now: query indexes, compaction, backups, an in-memory read cache, field-level encryption, statistics, and the WebSQL and cookie fallbacks.
+
 # Storage Manager
 ```
  /\        /\   

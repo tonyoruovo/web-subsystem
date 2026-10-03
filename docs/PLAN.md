@@ -140,9 +140,11 @@ No code is written until both steps are done.
 
 ### M6 — Data foundation: Crypto and Storage
 
-- `crypto`: shared → dedicated → virtual hosts, key delivery without Network
-- `storage`: the coordinator on a shared worker, the backends as features (IDB, OPFS, Cache, WebStorage, memory), migrations, quota events, optional Crypto
+- `crypto`: shared → dedicated → virtual hosts, key delivery without Network, keys persisted as non-extractable `CryptoKey` objects (ARCHITECTURE §18.1)
+- `storage`: the coordinator on a shared worker with the backends inside it (IDB, OPFS, Cache, WebStorage, memory), collections, migrations, quota events, optional Crypto (ARCHITECTURE §18.2)
+- Processor configuration in the kernel (ARCHITECTURE §8.7), and a state persistence adapter for the kernel
 - Dead letters and Logger buffers now persist through Storage
+- The old Crypto and Storage code in `src/managers` is ported and deleted
 
 **Gate:** with the shared worker killed during a write, storage fails over without data loss (browser test).
 

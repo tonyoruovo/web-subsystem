@@ -315,6 +315,12 @@ The runtime limits physical workers to `clamp(navigator.hardwareConcurrency - 1,
 
 A virtual processor yields within a configurable slice. The default is 5 ms. Work that regularly takes longer must declare a physical host first.
 
+### 8.7 Processor configuration (M6)
+
+A processor definition can carry a `config`: a structured-cloneable value. Every host gives it to `setup(scope, config)`. A worker host sends it in the `hello` handshake. A shared worker runs `setup` one time, with the config of the first tab that connects.
+
+When `setup` throws, the host does not start and the runner fails over to the next host. A processor uses this to refuse a host that cannot do its job. For example, the Storage coordinator refuses a worker that has no persistent backend (§18.2).
+
 ---
 
 ## 9. Packets
@@ -615,7 +621,8 @@ An adapter exists only where a framework can do something better than the neutra
 | `logger` | No required dependencies. NotificationCenter and Storage are late-bound (§7.2). Trimmed in M4 (see the proposal's amendments). |
 | `consent` | Grants persist through the kernel's persistence, not a direct Storage dependency. Retention and data-subject requests wait for Storage (M6). |
 | `auth` | Remove `credentialCache.hashedPassword`. Password hashing belongs on the server. |
-| `crypto` | Keep the rule that Crypto has no Network dependency (§7.1). |
+| `crypto` | Keep the rule that Crypto has no Network dependency (§7.1). Keys persist in IndexedDB as non-extractable `CryptoKey` objects (§18.1). |
+| `storage` | The backends run inside the coordinator processor, not as kernel features. Interactive transactions become atomic batches. Validation and encryption run on the main thread (§18.2). |
 | `design-system` | The proposal is empty and must be written before its milestone. |
 
 ---
@@ -634,3 +641,60 @@ Porting the Logger and Consent onto the kernel tested the unit contract on real 
 | The catalogue made Consent require Storage, which does not exist until M6. | Persisted state already goes through the kernel's `persistence`; Storage will back that adapter. Consent has no required dependency (§13). |
 
 The unit shape itself (state with a policy, views, commands, optional dependencies, `receive` and `subscribes`) needed no change.
+
+---
+
+## 18. Crypto and Storage (M6)
+
+This section is the design of milestone M6. It amends the `crypto` and `storage` proposals, and the proposals of the five backends.
+
+### 18.1 Crypto
+
+`@platform/crypto` gives the subsystem `crypto` (featurized, Tab scope, no required dependency). Its work runs in the processor `crypto`, on the hosts `shared`, then `dedicated`, then `virtual`.
+
+```text
+  caller --> crypto.commands.encrypt(text) --> processor 'crypto' (shared worker, or fallback)
+                                                 key registry: non-extractable CryptoKey objects
+                                                 IndexedDB '__platform_crypto' (the same on every host)
+            <-- 'v1.<keyId>.<iv>.<ciphertext>' --+
+```
+
+- **Keys are non-extractable.** The platform can use a key but cannot read its bytes.
+- **Keys persist in IndexedDB** as `CryptoKey` objects. IndexedDB stores them by structured clone and does not expose the key material. Every host and every session therefore uses the same keys, and data that Storage encrypted yesterday decrypts today. Without IndexedDB, keys stay in memory and Crypto reports that encrypted data does not survive a reload.
+- **Key sources.** `device` (the default) makes the keys on first use and persists them. `material` imports raw key material that the app injects. `fetch` gets the material from a URL at boot with a plain `fetch`, without the Network subsystem (§7.1, rule 4).
+- **Operations.** AES-GCM 256 encryption with the key id in the token, HMAC-SHA-256 tags, ECDSA P-256 signatures with an exportable public key, and SHA-256, SHA-384 and SHA-512 digests.
+- **Rotation.** `rotate(purpose)` makes a new active key. The old keys stay, so old data still decrypts and old tags still verify.
+- **Forgetting.** `forget()` deletes the persisted keys. The data that they encrypted can then never be read again (crypto-shredding). Consent and Auth can use it for an erase request.
+- **Teardown** clears the keys from memory.
+- Dropped for now: key derivation (PBKDF2, HKDF), a rotation timer, and the expiry of old keys.
+
+### 18.2 Storage
+
+`@platform/storage` gives the subsystem `storage` (featurized, Tab scope, optional dependency on `crypto`).
+
+```text
+  tab (main thread)                                coordinator processor (shared worker --> virtual)
+  collection.set(key, value)                       one writer for the origin, operations in order
+    validate (zod) --> serialize --> compress?  --> backend chain chosen in setup():
+    --> encrypt + HMAC (Crypto, optional)            worker:  indexeddb --> opfs --> cache
+    --> envelope ---------------------------------> virtual: indexeddb --> opfs --> cache
+                                                              --> localstorage --> sessionstorage --> memory
+  collection.get(key) <--------------------------- read / write / delete / query / batch / estimate / evict
+    verify --> decrypt --> decompress --> parse
+    --> migrate (and write back) --> validate
+  change --> BroadcastChannel --> every tab --> 'storage:changed' (Tab broadcast) and collection listeners
+```
+
+- **The backends are modules inside the coordinator**, not kernel features. They run in the worker, so they cannot be units of the main-thread kernel. The state of the subsystem reports the active backend and the probe result of each backend.
+- **Backend selection.** The coordinator probes the chain in `setup` (§8.7). A worker host with no persistent backend refuses to start, so the runner fails over to the virtual host. There, `localStorage` and `sessionStorage` exist, and `memory` is the last fallback.
+- **Collections.** Callers use `commands.collection(definition)`. A definition names the calling module and can give a zod schema, a schema version with migrations, a time to live, an eviction weight, encryption, compression and a maximum number of entries. Keys are canonical: `<domain>:<platform>:<platformVersion>:<module>:<key>`.
+- **Main-thread pipeline.** Zod schemas hold functions and cannot cross into a worker. Validation, serialization, compression and encryption therefore run on the main thread. The coordinator stores envelopes.
+- **Batches instead of interactive transactions.** A transaction that stays open across messages to a worker would hold locks across tasks. `batch(operations)` sends all writes and deletes together, and the coordinator runs them in one backend transaction.
+- **Writes are idempotent.** When a host dies during a write, the runner runs the write again on the next host. Both hosts use the same database, so no data is lost.
+- **Migrations.** A read migrates an old entry and writes it back. `migrate()` migrates a whole collection in one batch.
+- **Integrity.** With Crypto, an encrypted collection stores an HMAC tag. A wrong tag returns no value, broadcasts `storage:corrupt` and reports the error.
+- **Quota.** The subsystem checks the quota on an interval. At the warning level it broadcasts `storage:quota`. At the critical level it also evicts expired entries first, then the entries with the lowest weight.
+- **Kernel persistence.** `createStatePersistence()` gives the kernel's `persistence` option. It uses IndexedDB (or `localStorage`, then memory) on the main thread directly, because the kernel loads state before Storage runs.
+- **Late binding.** The Queue keeps its dead letters, and the Logger its entries, in collections when Storage runs (`ctx.watch`). Dead letters survive a reload.
+- Dropped for now: query indexes, compaction, backups, an in-memory read cache, field-level encryption, and the WebSQL and cookie fallbacks of the proposal.
+

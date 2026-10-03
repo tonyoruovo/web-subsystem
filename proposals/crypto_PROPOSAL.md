@@ -1,3 +1,12 @@
+> **Amendments (M6, 2026-10-03).** These override the text below wherever they conflict. See [ARCHITECTURE §18.1](../docs/ARCHITECTURE.md#181-crypto).
+>
+> - Crypto is a featurized, Tab-scoped subsystem with no required dependency. Its work runs in the processor `crypto` on the hosts shared, dedicated, then virtual.
+> - Keys are non-extractable `CryptoKey` objects that persist in IndexedDB (`__platform_crypto`), so every host and every session uses the same keys.
+> - Key sources: `device` (made on first use, the default), `material` (injected) and `fetch` (a plain bootstrap fetch, not the Network subsystem).
+> - Encryption tokens carry the key id: `v1.<keyId>.<iv>.<ciphertext>`. `rotate` keeps old keys for decryption and verification. `forget` deletes the persisted keys.
+> - Storage, not Crypto, reports integrity failures (`storage:corrupt`).
+> - Dropped for now: key derivation, the rotation timer, and the expiry of old keys.
+
 # Crypto Manager
 
 **Type**: Featurized  

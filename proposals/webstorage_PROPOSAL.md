@@ -1,3 +1,8 @@
+> **Amendments (M6, 2026-10-03).** These override the text below wherever they conflict. See [ARCHITECTURE §18.2](../docs/ARCHITECTURE.md#182-storage).
+>
+> - This backend implements `StorageBackend` from `@platform/storage` and runs inside the Storage coordinator processor, not as a kernel feature.
+> - `localStorage` and `sessionStorage` exist only on the main thread, so this backend is used only when the coordinator runs on the virtual host.
+
 # WebStorage Backends
 
 **Location:** `src/composables/managers/storage/backends/webstorage`

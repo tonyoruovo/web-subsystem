@@ -321,6 +321,20 @@ A processor definition can carry a `config`: a structured-cloneable value. Every
 
 When `setup` throws, the host does not start and the runner fails over to the next host. A processor uses this to refuse a host that cannot do its job. For example, the Storage coordinator refuses a worker that has no persistent backend (§18.2).
 
+### 8.8 Portable functions (M6)
+
+Structured clone, `postMessage` and IndexedDB refuse functions, but a processor often needs code from its caller: a migration, a serializer, a query predicate, an eviction comparator. Function boundaries must not limit the design, so `@platform/core` makes functions portable:
+
+```text
+  toPortable(value)    each function --> { __portable: 'function', id, source }   (the realm keeps id --> function)
+  fromPortable(value)  same realm:  the original function, with its closure (no eval)
+                       other realm: new Function(source)  (the function must be self-contained)
+```
+
+- A portable function must be **self-contained**: it uses only its parameters and the globals of the runtime. Closure variables, `this` and imports do not cross into another realm.
+- Rebuilding needs `eval`. Under a Content Security Policy without `'unsafe-eval'`, `canEvaluate()` is `false`. A processor that runs portable functions checks it in `setup` and refuses the host (§8.7), so the runner fails over to the main thread, where the original functions come back from the registry.
+- Zod schemas do not travel as functions. The caller's realm validates with the real schema, so refinements and transforms are never lost.
+
 ---
 
 ## 9. Packets
@@ -545,7 +559,7 @@ Shutdown runs disposers in reverse order. Persisting state is part of each unit'
 | NotificationCenter | centralized | Tab | virtual | GlobalState, Queue | `notification` |
 | Logger | featurized | Tab | virtual | — (late-bound: NotificationCenter, Storage) | `logger` |
 | Crypto | featurized | Tab (key cache shared per origin) | shared → dedicated → virtual | — | `crypto` |
-| Storage | featurized | Tab (coordinator shared per origin) | shared → virtual | — (optional: Crypto) | `storage`, backends |
+| Storage | featurized | Tab (coordinator shared per origin) | shared → virtual | — (uses the key store of `@platform/crypto`) | `storage`, backends |
 | Consent | featurized | Window | virtual | — (grants persist through the kernel's persistence, which Storage backs from M6) | `consent` |
 | Settings | featurized | Window | virtual | Consent | `settings` |
 | Network | featurized | Tab | virtual | GlobalState | `network` |
@@ -622,7 +636,7 @@ An adapter exists only where a framework can do something better than the neutra
 | `consent` | Grants persist through the kernel's persistence, not a direct Storage dependency. Retention and data-subject requests wait for Storage (M6). |
 | `auth` | Remove `credentialCache.hashedPassword`. Password hashing belongs on the server. |
 | `crypto` | Keep the rule that Crypto has no Network dependency (§7.1). Keys persist in IndexedDB as non-extractable `CryptoKey` objects (§18.1). |
-| `storage` | The backends run inside the coordinator processor, not as kernel features. Interactive transactions become atomic batches. Validation and encryption run on the main thread (§18.2). |
+| `storage` | The backends run inside the coordinator processor, not as kernel features. Interactive transactions become atomic batches. The coordinator runs the pipeline with portable functions, and the caller validates with zod (§8.8, §18.2). |
 | `design-system` | The proposal is empty and must be written before its milestone. |
 
 ---
@@ -670,25 +684,28 @@ This section is the design of milestone M6. It amends the `crypto` and `storage`
 
 ### 18.2 Storage
 
-`@platform/storage` gives the subsystem `storage` (featurized, Tab scope, optional dependency on `crypto`).
+`@platform/storage` gives the subsystem `storage` (featurized, Tab scope, no required dependency). It uses the key store of `@platform/crypto` for encryption.
 
 ```text
-  tab (main thread)                                coordinator processor (shared worker --> virtual)
-  collection.set(key, value)                       one writer for the origin, operations in order
-    validate (zod) --> serialize --> compress?  --> backend chain chosen in setup():
-    --> encrypt + HMAC (Crypto, optional)            worker:  indexeddb --> opfs --> cache
-    --> envelope ---------------------------------> virtual: indexeddb --> opfs --> cache
-                                                              --> localstorage --> sessionstorage --> memory
-  collection.get(key) <--------------------------- read / write / delete / query / batch / estimate / evict
-    verify --> decrypt --> decompress --> parse
-    --> migrate (and write back) --> validate
+  tab (main thread)                     coordinator processor (shared worker --> virtual)
+  collection.set(key, value)            one writer for the origin, operations in order
+    validate (zod, full schema)         backend chain chosen in setup():
+    --> value + portable definition -->   worker:  indexeddb --> opfs --> cache
+                                          virtual: indexeddb --> opfs --> cache --> localstorage --> sessionstorage --> memory
+                                        write: serialize --> compress? --> encrypt + HMAC? --> envelope --> backend
+                                        read:  backend --> verify --> decrypt --> decompress --> parse
+                                               --> migrate (and write back) --> query predicate
+  collection.get(key) <-- value ------
+    validate (zod, full schema)
   change --> BroadcastChannel --> every tab --> 'storage:changed' (Tab broadcast) and collection listeners
 ```
 
 - **The backends are modules inside the coordinator**, not kernel features. They run in the worker, so they cannot be units of the main-thread kernel. The state of the subsystem reports the active backend and the probe result of each backend.
 - **Backend selection.** The coordinator probes the chain in `setup` (§8.7). A worker host with no persistent backend refuses to start, so the runner fails over to the virtual host. There, `localStorage` and `sessionStorage` exist, and `memory` is the last fallback.
 - **Collections.** Callers use `commands.collection(definition)`. A definition names the calling module and can give a zod schema, a schema version with migrations, a time to live, an eviction weight, encryption, compression and a maximum number of entries. Keys are canonical: `<domain>:<platform>:<platformVersion>:<module>:<key>`.
-- **Main-thread pipeline.** Zod schemas hold functions and cannot cross into a worker. Validation, serialization, compression and encryption therefore run on the main thread. The coordinator stores envelopes.
+- **Pipeline in the coordinator.** The coordinator runs the pipeline, as the proposal intended: serialization, compression, encryption and the HMAC tag on a write, and the reverse with migration on a read. The functions of a collection (serializers, migrations, query predicates, eviction comparators) travel to the worker as portable functions (§8.8). The caller validates with the zod schema before a write and after a read, in its own realm, so the full schema applies.
+- **Encryption without a second hop.** The coordinator opens the key store of `@platform/crypto` itself. It reads the same IndexedDB keys as the Crypto subsystem, so Storage and Crypto use the same keys, and a write needs no message to another worker. Storage reloads the keys when Crypto broadcasts `crypto:keys-changed`.
+- **Strict CSP.** A worker that cannot evaluate portable functions refuses to start, so the coordinator runs on the main thread.
 - **Batches instead of interactive transactions.** A transaction that stays open across messages to a worker would hold locks across tasks. `batch(operations)` sends all writes and deletes together, and the coordinator runs them in one backend transaction.
 - **Writes are idempotent.** When a host dies during a write, the runner runs the write again on the next host. Both hosts use the same database, so no data is lost.
 - **Migrations.** A read migrates an old entry and writes it back. `migrate()` migrates a whole collection in one batch.

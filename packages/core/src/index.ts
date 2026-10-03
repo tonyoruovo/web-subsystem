@@ -19,6 +19,7 @@
  *   +-- PacketRouter       direct, or the Queue (M3)   (kernel.ts, transport.ts)
  *   RingBuffer             bounded logs and histories  (ring.ts)
  *   ScopeRelay             Window and Global broadcasts beyond the tab (relay.ts)
+ *   toPortable/fromPortable functions across worker and storage boundaries (portable.ts)
  *   ```
  *
  * Two more entry points exist: `@platform/core/testing` (an in-memory test
@@ -95,6 +96,7 @@ export * from './host';
 export * from './kernel';
 export * from './lifecycle';
 export * from './packet';
+export * from './portable';
 export * from './processor';
 export * from './relay';
 export * from './ring';

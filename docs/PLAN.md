@@ -142,7 +142,7 @@ No code is written until both steps are done.
 
 - `crypto`: shared → dedicated → virtual hosts, key delivery without Network, keys persisted as non-extractable `CryptoKey` objects (ARCHITECTURE §18.1)
 - `storage`: the coordinator on a shared worker with the backends inside it (IDB, OPFS, Cache, WebStorage, memory), collections, migrations, quota events, optional Crypto (ARCHITECTURE §18.2)
-- Processor configuration in the kernel (ARCHITECTURE §8.7), and a state persistence adapter for the kernel
+- Processor configuration and portable functions in the kernel (ARCHITECTURE §8.7, §8.8), and a state persistence adapter for the kernel
 - Dead letters and Logger buffers now persist through Storage
 - The old Crypto and Storage code in `src/managers` is ported and deleted
 

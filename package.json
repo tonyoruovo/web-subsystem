@@ -17,9 +17,10 @@
     "test:coverage": "vitest run --project node --coverage",
     "check:browsers": "node scripts/check-browsers.ts",
     "test:watch": "vitest",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs && pnpm test",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs && pnpm check:examples && pnpm test",
     "docs": "typedoc",
-    "check:docs": "node scripts/check-docs.ts"
+    "check:docs": "node scripts/check-docs.ts",
+    "check:examples": "node scripts/check-examples.ts"
   },
   "keywords": [
     "web",

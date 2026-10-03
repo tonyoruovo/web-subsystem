@@ -31,3 +31,4 @@ coverage/
 
 generated/
 bin/
+.examples/

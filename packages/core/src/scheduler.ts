@@ -220,10 +220,18 @@ export function createScheduler(
     kind = 'message-channel';
     const channel = new env.MessageChannel();
     const queue: (() => void)[] = [];
-    channel.port1.onmessage = () => queue.shift()?.();
-    // Node keeps the process alive while a port listens; browsers ignore this.
-    (channel.port1 as { unref?: () => void }).unref?.();
+    // Node keeps the process alive while a port is referenced. Reference the
+    // port only while tasks wait, so queued tasks run and an idle scheduler
+    // does not keep the process alive. Browsers have no ref() or unref().
+    // Setting onmessage refs a Node port, so unref after it.
+    const port = channel.port1 as { ref?: () => void; unref?: () => void };
+    channel.port1.onmessage = () => {
+      queue.shift()?.();
+      if (queue.length === 0) port.unref?.();
+    };
+    port.unref?.();
     enqueue = (callback) => {
+      if (queue.length === 0) port.ref?.();
       queue.push(callback);
       channel.port2.postMessage(null);
     };

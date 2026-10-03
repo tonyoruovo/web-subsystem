@@ -146,6 +146,24 @@ describe('createScheduler', () => {
     expect(order).toEqual(['sync', 'microtask', 'task']);
   });
 
+  it('keeps a Node process alive only while tasks wait (port ref and unref)', async () => {
+    const calls: string[] = [];
+    class TrackedChannel extends MessageChannel {
+      constructor() {
+        super();
+        const port = this.port1 as MessagePort & { ref(): void; unref(): void };
+        const { ref, unref } = port;
+        port.ref = () => void (calls.push('ref'), ref.call(port));
+        port.unref = () => void (calls.push('unref'), unref.call(port));
+      }
+    }
+    const s = createScheduler({ MessageChannel: TrackedChannel, setTimeout });
+    expect(calls.at(-1)).toBe('unref'); // idle: does not hold the process
+    calls.length = 0;
+    await Promise.all([s.postTask(() => 1), s.postTask(() => 2)]);
+    expect(calls).toEqual(['ref', 'unref']); // held while the two tasks waited, then released
+  });
+
   it('uses requestIdleCallback for idle work when present, and propagates errors', async () => {
     const requestIdleCallback = vi.fn((callback: () => void) => setTimeout(callback, 0));
     const s = createScheduler({ requestIdleCallback, setTimeout });

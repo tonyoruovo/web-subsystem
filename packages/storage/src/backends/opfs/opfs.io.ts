@@ -1,3 +1,5 @@
+/// <reference lib="WebWorker" />
+
 /**
  * @fileoverview OPFS file I/O adapter implementations.
  *

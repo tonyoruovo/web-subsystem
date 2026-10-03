@@ -28,7 +28,7 @@ The package starts its worker with `new SharedWorker(new URL('./crypto.worker.ts
 
 | Import                    | Contents                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------- |
-| `@platform/crypto`        | `createCrypto`, `createCryptoProcessor`, `KeyStore`, the key source types, encodings, errors |
+| `@platform/crypto`        | `createCrypto`, `createCryptoProcessor`, `KeyStore`, the cipher functions (`encryptText`, `decryptText`, `hmacText`, `verifyHmacText`), the key source types, encodings, errors |
 | `@platform/crypto/worker` | The worker entry. It serves the Crypto processor. You do not import it yourself.             |
 
 ## Usage
@@ -51,6 +51,8 @@ const jwk = await commands.publicKey(); // send it to the server once
 ```
 
 From another subsystem, declare `{ target: 'crypto' }` in `requires` and use `ctx.dependency<CryptoControl>('crypto')`.
+
+Storage does not send messages to Crypto. Its coordinator opens the same `KeyStore` and uses the cipher functions directly, so both make the same tokens and use the same keys. Give `createStorage` the same key source as `createCrypto`.
 
 ### Key sources
 

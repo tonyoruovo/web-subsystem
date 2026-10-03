@@ -184,3 +184,32 @@ await kernel.stop();
 cache key: d683e82e449817fa (64 hex digits)
 sha-256 of "abc": ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
 ```
+
+## Encrypt without the subsystem
+
+<!-- example id="crypto/cipher-functions" runtime="any" -->
+
+A tool, or the Storage coordinator, opens the key store itself and uses the cipher functions. They make the same tokens as the Crypto subsystem, with no message to a worker.
+
+```ts file=main.ts
+import { KeyStore, decryptText, encryptText, hmacText, verifyHmacText } from '@platform/crypto';
+
+// No IndexedDB factory: the keys stay in memory.
+const keys = await KeyStore.open({ source: { kind: 'device' } }, undefined);
+
+const token = await encryptText(keys, 'Door code: 4512');
+console.log('token format:', token.startsWith('v1.') && token.split('.').length === 4);
+console.log('decrypted:', await decryptText(keys, token));
+
+const tag = await hmacText(keys, token);
+console.log('tag valid:', await verifyHmacText(keys, token, tag));
+console.log('changed data valid:', await verifyHmacText(keys, token + 'x', tag));
+keys.clear();
+```
+
+```text output
+token format: true
+decrypted: Door code: 4512
+tag valid: true
+changed data valid: false
+```

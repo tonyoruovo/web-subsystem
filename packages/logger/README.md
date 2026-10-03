@@ -7,7 +7,7 @@ The **Logger** subsystem (id `logger`, featurized, Tab scope). It keeps:
 - **log entries**: level-filtered (globally and per subsystem), with their context **sanitized** so secrets never reach the log;
 - **packet trails**: every packet the Queue settles and every broadcast the Notification Center fans out, with its full fingerprint trail;
 
-and joins both by **`traceId`**, so one call shows everything that happened for one user action. It has no required dependency: it runs from the start of boot and follows the Queue and the Notification Center as they come and go. Entries can go to a **sink** (Storage, from M6); until one is bound they are buffered.
+and joins both by **`traceId`**, so one call shows everything that happened for one user action. It has no required dependency: it runs from the start of boot and follows the Queue and the Notification Center as they come and go. When Storage runs, entries of level `INFO` and higher are also kept in the collection `logger.entries`, and `history()` reads them, also from earlier sessions. You can bind your own **sink** too; until one is bound, entries are buffered.
 
 Design: [ARCHITECTURE §7.2 and §13](../../docs/ARCHITECTURE.md#72-late-binding-for-centralized-subsystems) and the amended [Logger proposal](../../proposals/logger_PROPOSAL.md).
 
@@ -91,6 +91,8 @@ commands.resetLevel('sync');
 | The ring is full                                        | The oldest entry is evicted; `state.dropped` counts them                                   |
 | No sink is bound                                        | Entries are buffered (`sinkCapacity`), and written in order on `bindSink`                  |
 | The sink throws or rejects                              | Reported to the kernel's `onError`; logging carries on                                     |
+| Storage runs                                            | Entries at or above `persist.minLevel` are stored; `history()` reads them                  |
+| Storage does not run                                    | Stored entries are buffered (`sinkCapacity`); `history()` returns the entries in memory    |
 
 ## Options
 
@@ -100,6 +102,7 @@ commands.resetLevel('sync');
 | `maxEntries`   | `1000`                    | Entries kept.                                          |
 | `maxTraces`    | `200`                     | Trace records kept.                                    |
 | `sinkCapacity` | `500`                     | Entries buffered until a sink is bound.                |
+| `persist`      | `{ maxEntries: 1000, minLevel: 'INFO' }` | Entries kept in Storage, or `false`. |
 | `console`      | `false`                   | Mirror entries at or above this level to the console.  |
 | `sanitize`     | default patterns, depth 6 | Extra sensitive patterns, or a different depth.        |
 | `sessionId`    | `crypto.randomUUID()`     | Identifies this run in every entry.                    |

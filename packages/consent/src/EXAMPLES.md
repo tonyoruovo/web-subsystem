@@ -188,7 +188,7 @@ async function openTab(): Promise<ConsentControl> {
   }
   return kernel.unit<ConsentControl>(CONSENT_ID).control!;
 }
-const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
 
 const first = await openTab();
 const second = await openTab();

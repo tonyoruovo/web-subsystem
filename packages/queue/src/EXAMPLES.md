@@ -175,3 +175,60 @@ await kernel.stop();
 refused: analytics:track (admission)
 delivered: payment:confirm
 ```
+
+## Keep dead letters across a reload
+
+<!-- example id="queue/dead-letters-in-storage" runtime="browser" -->
+
+A payment request fails while the billing service is down, and the user reloads the page. With Storage in the kernel, the dead letter comes back after the reload, so the app can still replay it.
+
+```ts file=main.ts
+import { Kernel, NO_CONTROL, defineSubsystem, type PacketPort } from '@platform/core';
+import { QUEUE_ID, createQueue, type QueueControl } from '@platform/queue';
+import { createStorage } from '@platform/storage';
+
+async function pageLoad() {
+  let port: PacketPort | undefined;
+  const app = defineSubsystem({
+    id: 'app',
+    scope: 'tab',
+    kind: 'featurized',
+    state: { initial: {} },
+    init: (ctx) => void (port = ctx.port),
+    control: () => NO_CONTROL,
+  });
+  const billing = defineSubsystem({
+    id: 'billing',
+    scope: 'tab',
+    kind: 'featurized',
+    state: { initial: {} },
+    receive: () => 'charged',
+    control: () => NO_CONTROL,
+  });
+  const queue = createQueue({ maxRetries: 0 });
+  const storage = createStorage({ domain: 'shop', hosts: ['virtual'], keys: null, quota: false });
+  const kernel = new Kernel([queue.subsystem, storage, app, billing], { router: queue.router });
+  await kernel.start();
+  return { kernel, port: port!, queue: kernel.unit<QueueControl>(QUEUE_ID).control! };
+}
+
+const first = await pageLoad();
+await first.kernel.unit('billing').suspend('Service down.');
+await first.port.send({ eventId: 'charge', payload: { amount: 30 }, target: 'billing' }).catch(() => {});
+console.log('dead letters before the reload:', first.queue.views.deadLetters.getSnapshot().length);
+await new Promise((resolve) => setTimeout(resolve, 100)); // let the write finish
+await first.kernel.stop();
+
+const second = await pageLoad();
+await new Promise((resolve) => setTimeout(resolve, 100)); // Storage loads the letters
+const [letter] = second.queue.views.deadLetters.getSnapshot();
+console.log('dead letters after the reload:', second.queue.views.deadLetters.getSnapshot().length);
+console.log('replayed:', second.queue.commands.replay(letter!.envelope.metadata.messageId));
+await second.kernel.stop();
+```
+
+```text output
+dead letters before the reload: 1
+dead letters after the reload: 1
+replayed: true
+```

@@ -164,3 +164,42 @@ console.log(JSON.stringify(report, null, 2));
   "retry": "[Function]"
 }
 ```
+
+## Read the log of the last session
+
+<!-- example id="logger/history" runtime="browser" -->
+
+A support page shows the errors from before the last reload. With Storage in the kernel, the Logger keeps its entries, and `history()` reads them from every session.
+
+```ts file=main.ts
+import { Kernel } from '@platform/core';
+import { LOGGER_ID, createLogger, type LoggerControl } from '@platform/logger';
+import { createStorage } from '@platform/storage';
+
+async function pageLoad(sessionId: string) {
+  const kernel = new Kernel([
+    createLogger({ sessionId }),
+    createStorage({ domain: 'shop', hosts: ['virtual'], keys: null, quota: false }),
+  ]);
+  await kernel.start();
+  return { kernel, logger: kernel.unit<LoggerControl>(LOGGER_ID).control! };
+}
+
+const first = await pageLoad('session-1');
+first.logger.commands.log('ERROR', 'Payment failed', { subsystemId: 'billing' });
+await new Promise((resolve) => setTimeout(resolve, 100)); // let the write finish
+await first.kernel.stop();
+
+const second = await pageLoad('session-2');
+second.logger.commands.log('INFO', 'Support page opened');
+await new Promise((resolve) => setTimeout(resolve, 100));
+for (const entry of await second.logger.commands.history()) {
+  console.log(entry.sessionId, entry.level, entry.message);
+}
+await second.kernel.stop();
+```
+
+```text output
+session-1 ERROR Payment failed
+session-2 INFO Support page opened
+```

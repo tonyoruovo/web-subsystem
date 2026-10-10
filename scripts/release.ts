@@ -6,15 +6,17 @@
  * stays `0.0.2` until the alpha (docs/PLAN.md §4.1).
  *
  * ```text
- *   node scripts/release.ts sync           publishConfig, files, repository/author/homepage/bugs, from the workspace, in each package.json
- *   node scripts/release.ts check          one version; the above in sync; dist/ built; npm pack has dist/ and no tests
- *   node scripts/release.ts version 0.1.0  sets the version of every package
+ *   node scripts/release.ts sync [--registry github|npm]  publishConfig, files, repository/author/homepage/bugs, from the workspace, in each package.json
+ *   node scripts/release.ts check                         one version; the above in sync; dist/ built; npm pack has dist/ and no tests
+ *   node scripts/release.ts version 0.1.0                  sets the version of every package
  *   ```
  *
- * `sync` also points `publishConfig.registry` at GitHub Packages
- * (`npm.pkg.github.com`), since every package is scoped to this repo's
- * owner. Nothing publishes there until a release is actually run
- * (`pnpm -r publish`): this only prepares the config.
+ * `sync` points `publishConfig.registry` at GitHub Packages by default
+ * (`npm.pkg.github.com`, every package scoped to this repo's owner);
+ * `--registry npm` points it at the public npm registry instead, for a
+ * separate `pnpm -r publish` run there. `sync` (no flag) switches it back.
+ * Nothing publishes until a release is actually run (`pnpm -r publish`):
+ * this only prepares the config.
  *
  * @example
  * Before a release
@@ -51,8 +53,17 @@ const packages = readdirSync(packagesDir)
 const toDist = (target: string, extension: '.js' | '.d.ts') =>
   target.replace(/^\.\/src\//, './dist/').replace(/\.ts$/, extension);
 
+/** @summary The two registries a release can point `publishConfig.registry` at. */
+const REGISTRIES = {
+  github: 'https://npm.pkg.github.com',
+  npm: 'https://registry.npmjs.org/',
+} as const;
+
 /** @summary The publish fields of a package, derived from its workspace exports and bin. */
-function publishConfigOf(manifest: Manifest): Record<string, unknown> {
+function publishConfigOf(
+  manifest: Manifest,
+  registry: string = REGISTRIES.github,
+): Record<string, unknown> {
   const exports: Record<string, unknown> = {};
   for (const [key, target] of Object.entries(manifest.exports ?? {})) {
     exports[key] = target.endsWith('.ts')
@@ -64,7 +75,7 @@ function publishConfigOf(manifest: Manifest): Record<string, unknown> {
     types: toDist('./src/index.ts', '.d.ts'),
     exports,
     access: 'public',
-    registry: 'https://npm.pkg.github.com',
+    registry,
   };
   if (manifest.bin) {
     config.bin = Object.fromEntries(
@@ -94,19 +105,26 @@ function metaOf(dir: string): {
 const write = (path: string, manifest: Manifest) =>
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 
-const [command, argument] = process.argv.slice(2);
+const [command, ...rest] = process.argv.slice(2);
+const argument = rest.find((arg) => !arg.startsWith('--'));
 const problems: string[] = [];
 
 if (command === 'sync') {
+  const registryFlagIndex = rest.indexOf('--registry');
+  const registryName = registryFlagIndex >= 0 ? rest[registryFlagIndex + 1] : 'github';
+  if (registryName !== 'github' && registryName !== 'npm') {
+    throw new Error('--registry must be "github" or "npm".');
+  }
+  const registry = REGISTRIES[registryName];
   for (const { path, manifest } of packages) {
     manifest.files = filesOf(manifest);
-    manifest.publishConfig = publishConfigOf(manifest);
+    manifest.publishConfig = publishConfigOf(manifest, registry);
     manifest.author ||= 'MathAid';
     Object.assign(manifest, metaOf(join(path, '..')));
     write(path, manifest);
   }
   console.log(
-    `publishConfig, files and repository metadata written in ${packages.length} packages.`,
+    `publishConfig (registry: ${registry}), files and repository metadata written in ${packages.length} packages.`,
   );
 } else if (command === 'version') {
   if (!argument || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(argument)) {
@@ -124,7 +142,11 @@ if (command === 'sync') {
   for (const { path, manifest } of packages) {
     const dir = join(path, '..');
     const where = relative(root, dir);
-    if (JSON.stringify(manifest.publishConfig) !== JSON.stringify(publishConfigOf(manifest))) {
+    const currentRegistry = (manifest.publishConfig as { registry?: string } | undefined)?.registry;
+    if (
+      JSON.stringify(manifest.publishConfig) !==
+      JSON.stringify(publishConfigOf(manifest, currentRegistry))
+    ) {
       problems.push(
         `${where}: publishConfig is not in sync with exports (run: node scripts/release.ts sync).`,
       );

@@ -57,7 +57,7 @@
     "@microsoft/api-documenter": "^7.30.18",
     "@microsoft/api-extractor": "^7.59.4",
     "@microsoft/tsdoc-config": "^0.18.3",
-    "@types/node": "24.1.0",
+    "@types/node": "26.6.4",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
     "@typescript/native": "npm:typescript@^7.0.2",

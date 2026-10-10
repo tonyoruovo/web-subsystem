@@ -1,6 +1,6 @@
 # @webkrnl/global-state
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/global-state) and [JSR](https://jsr.io/@webkrnl/global-state).
 
 The **Global State** subsystem: the platform's view of itself. It is a centralized subsystem (id `global-state`, Tab scope) that:
 

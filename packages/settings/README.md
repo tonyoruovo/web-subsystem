@@ -1,6 +1,6 @@
 # @webkrnl/settings
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/settings) and [JSR](https://jsr.io/@webkrnl/settings).
 
 The **Settings** subsystem (id `settings`, featurized, Window scope, requires Consent). It keeps the preferences of the user and of the device, and is the state behind a settings page.
 

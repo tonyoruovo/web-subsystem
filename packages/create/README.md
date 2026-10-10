@@ -1,6 +1,6 @@
 # @webkrnl/create
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/create) and [JSR](https://jsr.io/@webkrnl/create).
 
 The **scaffolder** of WebKrnl. `npm init @webkrnl <folder>` writes a Vite app that boots WebKrnl, with generated tests. It has no dependencies.
 

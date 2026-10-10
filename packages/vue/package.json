@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/vue",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "The Vue adapter of WebKrnl: useView, the plugin, useT and the vue-router route source.",
   "type": "module",
   "main": "./src/index.ts",
@@ -16,7 +16,7 @@
     "@webkrnl/core": "workspace:*",
     "@webkrnl/platform": "workspace:*",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.4.0"
   },
   "peerDependenciesMeta": {
     "vue-router": {

@@ -1,6 +1,6 @@
 # @webkrnl/crypto
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/crypto) and [JSR](https://jsr.io/@webkrnl/crypto).
 
 The **Crypto** subsystem (id `crypto`, featurized, Tab scope, no required dependency). It owns the keys of the platform and the operations that use them:
 

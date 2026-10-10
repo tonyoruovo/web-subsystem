@@ -64,12 +64,12 @@ export default defineConfig({
           // A WebSocket server for the Realtime browser tests (port: inject('wsPort')).
           globalSetup: ['./scripts/test-ws-server.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
+          // Windows can reserve the default port (63315) for Hyper-V; BROWSER_PORT moves it.
+          api: { port: Number(process.env.BROWSER_PORT ?? 63315) },
           browser: {
             enabled: true,
             headless: true,
             provider: playwright(),
-            // Windows can reserve the default port (63315) for Hyper-V; BROWSER_PORT moves it.
-            api: { port: Number(process.env.BROWSER_PORT ?? 63315) },
             instances,
           },
         },

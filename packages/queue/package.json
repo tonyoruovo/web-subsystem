@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/queue",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "The Queue subsystem: the kernel's packet router, with admission, priorities, ordering, retries and dead letters.",
   "type": "module",
   "main": "./src/index.ts",

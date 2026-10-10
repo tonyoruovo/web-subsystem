@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/crypto",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "The Crypto subsystem: non-extractable keys that persist in IndexedDB, encryption, HMAC, signatures and digests, in a shared worker.",
   "type": "module",
   "main": "./src/index.ts",

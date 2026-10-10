@@ -84,9 +84,52 @@ function denoBinary(): string {
   throw new Error('Could not find the downloaded jsr/deno binary. Run: pnpm dlx jsr --version');
 }
 
+/**
+ * @summary Runs `fn` with every `"@webkrnl/*": "workspace:*"` in `dir`'s package.json replaced by its real version.
+ * @description JSR's npm-compat layer reads a bare import like `@webkrnl/core`
+ * as `npm:@webkrnl/core`, then looks in package.json for the version to pin
+ * it to - `workspace:*` isn't a version, so it reports the specifier as
+ * missing one ("specifier 'npm:@webkrnl/core' is missing a version
+ * constraint"). pnpm rewrites `workspace:*` on its own publish; `jsr publish`
+ * does not, so this does the same rewrite here, only for the duration of
+ * the call, on the file on disk (not a copy - `jsr publish` reads it from
+ * `dir` directly).
+ */
+function withPinnedWorkspaceDeps<T>(dir: string, fn: () => T): T {
+  const packageJsonPath = join(dir, 'package.json');
+  const original = readFileSync(packageJsonPath, 'utf8');
+  const manifest = JSON.parse(original) as Manifest & Record<string, unknown>;
+  const version = manifest.version;
+  let changed = false;
+  for (const field of [
+    'dependencies',
+    'peerDependencies',
+    'devDependencies',
+    'optionalDependencies',
+  ]) {
+    const deps = manifest[field] as Record<string, string> | undefined;
+    if (!deps) continue;
+    for (const [dep, range] of Object.entries(deps)) {
+      if (dep.startsWith('@webkrnl/') && range === 'workspace:*') {
+        deps[dep] = version;
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return fn();
+  writeFileSync(packageJsonPath, JSON.stringify(manifest, null, 2) + '\n');
+  try {
+    return fn();
+  } finally {
+    writeFileSync(packageJsonPath, original);
+  }
+}
+
 function runOne(name: string, args: string[]): boolean {
   const dir = join(packagesDir, name);
-  const result = spawnSync(denoBinary(), args, { cwd: dir, encoding: 'utf8', stdio: 'inherit' });
+  const result = withPinnedWorkspaceDeps(dir, () =>
+    spawnSync(denoBinary(), args, { cwd: dir, encoding: 'utf8', stdio: 'inherit' }),
+  );
   return result.status === 0;
 }
 
@@ -110,9 +153,9 @@ if (command === 'sync') {
     '--unstable-sloppy-imports',
     '--unstable-byonm',
     '--no-check',
-    ...(command === 'check' ? ['--dry-run', '--allow-dirty'] : []),
+    ...(command === 'check' ? ['--dry-run'] : []),
+    '--allow-dirty', // withPinnedWorkspaceDeps always touches package.json for the duration of the call
     ...(rest.includes('--allow-slow-types') ? ['--allow-slow-types'] : []),
-    ...(rest.includes('--allow-dirty') ? ['--allow-dirty'] : []),
     ...(rest.includes('--token') ? ['--token', rest[rest.indexOf('--token') + 1]!] : []),
   ];
   let failed = false;

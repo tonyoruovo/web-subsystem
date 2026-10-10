@@ -212,7 +212,7 @@ export async function scaffold(options: ScaffoldOptions): Promise<ScaffoldResult
  * @summary The help of the command.
  * @public
  */
-export const HELP = `Create a WebKrnl app.
+export const HELP: string = `Create a WebKrnl app.
 
 Usage: npm init @webkrnl <folder> [--template vue|vanilla] [--name <name>] [--local <path>]
 

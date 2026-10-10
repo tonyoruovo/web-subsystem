@@ -1,0 +1,13 @@
+{
+  "name": "@webkrnl/realtime",
+  "version": "0.0.2",
+  "license": "ISC",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/socket/socket.worker.ts",
+    "./conformance": "./src/conformance.ts"
+  },
+  "publish": {
+    "exclude": ["test", "**/*.spec.ts", "**/*.test.ts", "FIXES.md"]
+  }
+}

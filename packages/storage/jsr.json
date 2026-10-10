@@ -1,0 +1,12 @@
+{
+  "name": "@webkrnl/storage",
+  "version": "0.0.2",
+  "license": "ISC",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/coordinator.worker.ts"
+  },
+  "publish": {
+    "exclude": ["test", "**/*.spec.ts", "**/*.test.ts", "FIXES.md"]
+  }
+}

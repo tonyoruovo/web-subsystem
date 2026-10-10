@@ -74,7 +74,7 @@ export class MemoryTransaction<TRaw> implements ITransaction {
    * @summary The buffered operations, oldest first.
    * @returns The buffered operations, oldest first.
    */
-  get operations() {
+  get operations(): readonly BufferedOp<TRaw>[] {
     return this._ops as Readonly<typeof this._ops>; //Object.freeze(this._ops)
   }
 

@@ -1,0 +1,12 @@
+{
+  "name": "@webkrnl/crypto",
+  "version": "0.0.2",
+  "license": "ISC",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/crypto.worker.ts"
+  },
+  "publish": {
+    "exclude": ["test", "**/*.spec.ts", "**/*.test.ts", "FIXES.md"]
+  }
+}

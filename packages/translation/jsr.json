@@ -1,0 +1,12 @@
+{
+  "name": "@webkrnl/translation",
+  "version": "0.0.2",
+  "license": "ISC",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/compile.worker.ts"
+  },
+  "publish": {
+    "exclude": ["test", "**/*.spec.ts", "**/*.test.ts", "FIXES.md"]
+  }
+}

@@ -688,7 +688,7 @@ export class OPFSBackend implements IStorageBackend<string> {
    * @param {string} [txId] The id of the transaction.
    * @returns {boolean} `true` when the transaction (or any transaction) is open.
    */
-  isTransactionActive(txId?: string) {
+  isTransactionActive(txId?: string): boolean {
     try {
       const tx = txId ? this._getTransaction(txId) : this._transactions.values().next()?.value;
       return tx !== undefined && tx !== null;

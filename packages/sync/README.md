@@ -1,6 +1,6 @@
 # @webkrnl/sync
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/sync) and [JSR](https://jsr.io/@webkrnl/sync).
 
 The **Sync** subsystem (id `sync`, featurized, Tab scope). It gets the changes of the user to the server, **exactly once**, also after hours offline:
 

@@ -2,8 +2,9 @@
  * @fileoverview
  * @summary The release checks of the fixed-version monorepo: one version, publish fields that point at `dist/`, clean packages.
  * @description
- * Implements docs/ARCHITECTURE.md §22.5. Nothing is published: the version
- * stays `0.0.2` until the alpha (docs/PLAN.md §4.1).
+ * Implements docs/ARCHITECTURE.md §22.5. The first release candidate,
+ * `0.1.0-rc.1`, is published to GitHub Packages and JSR; a full `0.1.0`
+ * (and the alpha, docs/PLAN.md §4.1) waits on feedback from it.
  *
  * ```text
  *   node scripts/release.ts sync [--registry github|npm]  publishConfig, files, repository/author/homepage/bugs, from the workspace, in each package.json
@@ -130,9 +131,21 @@ if (command === 'sync') {
   if (!argument || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(argument)) {
     throw new Error('Give a version, for example: node scripts/release.ts version 0.1.0');
   }
+  const isRc = /-rc\.\d+$/.test(argument);
+  const kind = isRc ? 'Release candidate' : 'Release';
   for (const { path, manifest } of packages) {
     manifest.version = argument;
     write(path, manifest);
+    const readmePath = join(path, '..', 'README.md');
+    if (!existsSync(readmePath)) continue;
+    const name = manifest.name.replace(/^@webkrnl\//, '');
+    const banner =
+      `> **${kind} (\`${argument}\`).** Published to ` +
+      `[GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/${name}) and ` +
+      `[JSR](https://jsr.io/@webkrnl/${name}).`;
+    const readme = readFileSync(readmePath, 'utf8');
+    const updated = readme.replace(/^> \*\*(Pre-alpha|Release candidate|Release)\b.*$/m, banner);
+    if (updated !== readme) writeFileSync(readmePath, updated);
   }
   console.log(`Every package is now ${argument}.`);
 } else if (command === 'check') {

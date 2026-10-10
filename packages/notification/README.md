@@ -1,6 +1,6 @@
 # @webkrnl/notification
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/notification) and [JSR](https://jsr.io/@webkrnl/notification).
 
 The **Notification Center**: the platform's broadcast router. It is a centralized subsystem (id `notification`, Tab scope) that owns **routing only** (amendment A10):
 

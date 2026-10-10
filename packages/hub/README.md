@@ -1,6 +1,6 @@
 # @webkrnl/hub
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/hub) and [JSR](https://jsr.io/@webkrnl/hub).
 
 **Window scope**: broadcasts that reach every tab of a site, across its subdomains, in one browser session. `BroadcastChannel` and IndexedDB stop at the origin, and `a.example.com` and `b.example.com` are different origins, so Window scope needs:
 

@@ -1,6 +1,6 @@
 # @webkrnl/analytics
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/analytics) and [JSR](https://jsr.io/@webkrnl/analytics).
 
 The **Analytics** subsystem (id `analytics`, featurized, Tab scope, requires Consent). It collects metrics and usage events, and sends them in batches. It is the sink of the platform: units report to it, and no unit depends on it.
 

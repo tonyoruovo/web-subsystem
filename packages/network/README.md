@@ -1,6 +1,6 @@
 # @webkrnl/network
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/network) and [JSR](https://jsr.io/@webkrnl/network).
 
 The **Network** subsystem (id `network`, featurized, Tab scope, no required dependency). It sends the HTTP requests of every subsystem and of the app:
 

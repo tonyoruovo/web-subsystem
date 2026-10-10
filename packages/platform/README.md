@@ -1,6 +1,6 @@
 # @webkrnl/platform
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/platform) and [JSR](https://jsr.io/@webkrnl/platform).
 
 The **orchestrator** of WebKrnl. `createPlatform(options)` boots a chosen set of subsystems with one call, wired together the way the design says, so an app does not repeat the wiring that each package leaves to it.
 

@@ -1,6 +1,6 @@
 # @webkrnl/design-system
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/design-system) and [JSR](https://jsr.io/@webkrnl/design-system).
 
 The **Design System** subsystem (id `design-system`, featurized, Page scope, no required dependency). It gives the page its **design tokens** and its **theme**, as CSS custom properties (`--ds-*`) and attributes on `<html>`. It has no components and no framework dependency: components of any framework read the custom properties.
 

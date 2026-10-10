@@ -1,6 +1,6 @@
 # @webkrnl/consent
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/consent) and [JSR](https://jsr.io/@webkrnl/consent).
 
 The **Consent** subsystem (id `consent`, featurized, Window scope). It records what the user agreed to, per category, under a **policy version**, and answers the question every telemetry path asks: `isGranted(category)`.
 

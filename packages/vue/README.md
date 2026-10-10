@@ -1,6 +1,6 @@
 # @webkrnl/vue
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/vue) and [JSR](https://jsr.io/@webkrnl/vue).
 
 The **Vue adapter** of WebKrnl. Every WebKrnl view is an external store, so Vue can use it without an adapter; this package makes it short, and connects vue-router to Page scope. It adds no behaviour that the core lacks (ARCHITECTURE §14.1).
 
@@ -20,7 +20,7 @@ Design: [ARCHITECTURE §22.3](../../docs/ARCHITECTURE.md#223-the-vue-adapter-web
     "@webkrnl/platform": "workspace:*",
     "@webkrnl/vue": "workspace:*",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.4.0"
   }
 }
 ```

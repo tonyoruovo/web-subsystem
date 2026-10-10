@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/global-state",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "The Global State subsystem: derived platform status, admission, pending work, environment and tab identity.",
   "type": "module",
   "main": "./src/index.ts",

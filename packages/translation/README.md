@@ -1,6 +1,6 @@
 # @webkrnl/translation
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/translation) and [JSR](https://jsr.io/@webkrnl/translation).
 
 The **Translation** subsystem (id `translation`, featurized, Tab scope, no required dependency). It gives the UI localized messages and locale-aware formatting, and works offline.
 

@@ -1,6 +1,6 @@
 # @webkrnl/queue
 
-> **Pre-alpha (`0.0.2`).** Not published to npm yet.
+> **Release candidate (`0.1.0-rc.2`).** Published to [GitHub Packages](https://github.com/orgs/webkrnl/packages/npm/package/queue) and [JSR](https://jsr.io/@webkrnl/queue).
 
 The **Queue**: the platform's packet router. It is a centralized subsystem (id `queue`, Tab scope), and its `router` replaces the kernel's direct router, so every packet a subsystem sends goes through it. The Queue owns **scheduling**:
 

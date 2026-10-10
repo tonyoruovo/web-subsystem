@@ -9,9 +9,7 @@
   "bugs": {
     "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
-  },
+  "private": true,
   "author": "MathAid",
   "description": "A library for building web subsystems with TypeScript.",
   "type": "module",

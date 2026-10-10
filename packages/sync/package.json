@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/sync",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Sync subsystem: an outbox of changes that reaches the server exactly once, pulls, conflicts, and offline replay.",
   "type": "module",
   "main": "./src/index.ts",

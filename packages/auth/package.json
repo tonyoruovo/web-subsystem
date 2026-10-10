@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/auth",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Auth subsystem: sessions from app handlers, token refresh, permissions, elevations, and status in every tab of the site.",
   "type": "module",
   "main": "./src/index.ts",

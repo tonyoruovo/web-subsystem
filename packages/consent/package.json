@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/consent",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Consent subsystem: per-category grants, policy versions, and the gate telemetry checks.",
   "type": "module",
   "main": "./src/index.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/network",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Network subsystem: requests with timeouts, retries, deduplication, a cache, a circuit breaker and interceptors.",
   "type": "module",
   "main": "./src/index.ts",

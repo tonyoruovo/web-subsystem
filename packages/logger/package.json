@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/logger",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Logger subsystem: sanitized, level-filtered logs and packet trails joined by traceId.",
   "type": "module",
   "main": "./src/index.ts",

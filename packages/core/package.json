@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/core",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The kernel of the platform: units, lifecycle, dependencies, state, views, packets and scopes.",
   "type": "module",
   "main": "./src/index.ts",

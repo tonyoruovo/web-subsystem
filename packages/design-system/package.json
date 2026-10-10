@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/design-system",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Design System subsystem: design tokens and the theme, as CSS custom properties.",
   "type": "module",
   "main": "./src/index.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/storage",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Storage subsystem: collections over IndexedDB, OPFS, Cache, Web Storage and memory, run by one coordinator for the origin.",
   "type": "module",
   "main": "./src/index.ts",
@@ -37,6 +37,18 @@
         "types": "./dist/coordinator.worker.d.ts",
         "import": "./dist/coordinator.worker.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/storage"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/storage#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

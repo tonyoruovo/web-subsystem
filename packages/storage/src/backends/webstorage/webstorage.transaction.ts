@@ -140,7 +140,7 @@ export class WebStorageTransaction implements IWebStorageTransaction {
 
   /**
    * @summary Fixed at `'compensating'` — snapshot + restore, no true ACID isolation.
-   * @inheritdoc
+   * @inheritDoc
    */
   readonly strength: Extract<TransactionStrength, 'compensating'> = 'compensating';
 

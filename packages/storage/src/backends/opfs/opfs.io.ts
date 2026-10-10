@@ -1,5 +1,3 @@
-/// <reference lib="WebWorker" />
-
 /**
  * @fileoverview OPFS file I/O adapter implementations.
  *
@@ -53,6 +51,33 @@
  */
 
 import type { IFileIOAdapter, IIOAdapterFactory, OPFSExecutionContext } from './opfs.types';
+
+/**
+ * @summary A `FileSystemSyncAccessHandle` (WebWorker-lib only), narrowed to the members this file calls.
+ * @remarks Declared locally instead of `/// <reference lib="WebWorker" />`
+ * (JSR bans triple-slash directives that modify globals, and it would
+ * otherwise force every consumer's own `lib` to include `WebWorker`) and
+ * without a `declare global` augmentation (JSR bans those too - see
+ * {@link OPFSFileHandleWithSync}).
+ */
+interface OPFSSyncAccessHandle {
+  getSize(): number;
+  read(buffer: ArrayBufferView, options?: { at?: number }): number;
+  write(buffer: ArrayBufferView, options?: { at?: number }): number;
+  truncate(newSize: number): void;
+  flush(): void;
+  close(): void;
+}
+
+/**
+ * @summary A `FileSystemFileHandle` with the WebWorker-only `createSyncAccessHandle` member.
+ * @remarks A local, non-global extension of the public `FileSystemFileHandle`
+ * shape, cast at the one call site that needs it, rather than augmenting the
+ * ambient global (which JSR's publish check rejects).
+ */
+interface OPFSFileHandleWithSync extends FileSystemFileHandle {
+  createSyncAccessHandle(): Promise<OPFSSyncAccessHandle>;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Encoding utilities
@@ -110,7 +135,7 @@ class SyncFileIOAdapter implements IFileIOAdapter {
   /**
    * @summary Makes a `object`.
    */
-  constructor(private readonly _handle: FileSystemSyncAccessHandle) {}
+  constructor(private readonly _handle: OPFSSyncAccessHandle) {}
 
   async readAll(): Promise<Uint8Array> {
     const size = this._handle.getSize();
@@ -247,7 +272,7 @@ export class SyncIOAdapterFactory implements IIOAdapterFactory {
    * so the lock is not leaked.
    */
   async open(handle: FileSystemFileHandle): Promise<IFileIOAdapter> {
-    const pending = handle.createSyncAccessHandle();
+    const pending = (handle as OPFSFileHandleWithSync).createSyncAccessHandle();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(

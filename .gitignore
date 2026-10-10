@@ -25,6 +25,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+.npmrc
 
 # Test output
 coverage/
@@ -36,3 +37,4 @@ bin/
 
 # The documentation site (pnpm docs)
 docs-site/
+.api-extractor-temp/

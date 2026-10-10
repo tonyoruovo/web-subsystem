@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/realtime",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Realtime subsystem: one WebSocket in a dedicated worker for many topics, with reconnects, heartbeats and presence.",
   "type": "module",
   "main": "./src/index.ts",
@@ -44,6 +44,18 @@
         "types": "./dist/conformance.d.ts",
         "import": "./dist/conformance.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/realtime"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/realtime#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

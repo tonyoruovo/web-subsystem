@@ -11,7 +11,7 @@
     "excludeInternal": true
   },
   "readme": "README.md",
-  "out": "docs-site",
+  "out": "docs-site/typedoc",
   "includeVersion": true,
   "skipErrorChecking": true,
   "highlightLanguages": [

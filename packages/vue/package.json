@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/vue",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Vue adapter of WebKrnl: useView, the plugin, useT and the vue-router route source.",
   "type": "module",
   "main": "./src/index.ts",
@@ -38,6 +38,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/vue"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/vue#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

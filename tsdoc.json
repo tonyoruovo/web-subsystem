@@ -1,10 +1,18 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/tsdoc/v0/tsdoc.schema.json",
-  "extends": ["typedoc/tsdoc.json"],
   "noStandardTags": false,
   "tagDefinitions": [
-    { "tagName": "@description", "syntaxKind": "block" },
     { "tagName": "@fileoverview", "syntaxKind": "block" },
-    { "tagName": "@constant", "syntaxKind": "block" }
+    { "tagName": "@description", "syntaxKind": "block" },
+    { "tagName": "@summary", "syntaxKind": "block" },
+    { "tagName": "@constant", "syntaxKind": "block" },
+    { "tagName": "@author", "syntaxKind": "block" },
+    { "tagName": "@module", "syntaxKind": "block" },
+    { "tagName": "@template", "syntaxKind": "block", "allowMultiple": true },
+    { "tagName": "@default", "syntaxKind": "block" },
+    { "tagName": "@version", "syntaxKind": "block" },
+    { "tagName": "@file", "syntaxKind": "block" },
+    { "tagName": "@linkcode", "syntaxKind": "inline", "allowMultiple": true },
+    { "tagName": "@linkplain", "syntaxKind": "inline", "allowMultiple": true }
   ]
 }

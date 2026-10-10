@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/notification",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Notification Center subsystem: broadcast routing, subscriptions, access control and history.",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,6 +27,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/notification"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/notification#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

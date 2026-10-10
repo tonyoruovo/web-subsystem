@@ -1,7 +1,18 @@
 {
   "name": "webkrnl",
   "version": "0.0.2",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "author": "MathAid",
   "description": "A library for building web subsystems with TypeScript.",
   "type": "module",
   "scripts": {
@@ -18,7 +29,10 @@
     "check:browsers": "node scripts/check-browsers.ts",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs && pnpm check:examples && pnpm test",
-    "docs:site": "typedoc",
+    "docs:typedoc": "typedoc",
+    "docs:jsdoc": "jsdoc -c jsdoc.conf.json",
+    "docs:tsdoc": "node scripts/api-docs.ts",
+    "docs:site": "pnpm build && pnpm docs:typedoc && pnpm docs:jsdoc && pnpm docs:tsdoc",
     "check:docs": "node scripts/check-docs.ts",
     "check:examples": "node scripts/check-examples.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm check:docs",
@@ -42,6 +56,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@microsoft/api-documenter": "^7.30.18",
+    "@microsoft/api-extractor": "^7.59.4",
+    "@microsoft/tsdoc-config": "^0.18.3",
     "@types/node": "24.1.0",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
@@ -69,6 +86,7 @@
     "eslint": "^10.7.0",
     "eslint-plugin-import-x": "^4.17.1",
     "fake-indexeddb": "^6.2.5",
+    "jsdoc": "^4.0.5",
     "playwright": "^1.63.0",
     "prettier": "^3.9.5",
     "rolldown": "1.2.11",

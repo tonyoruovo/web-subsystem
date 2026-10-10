@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/logger",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Logger subsystem: sanitized, level-filtered logs and packet trails joined by traceId.",
   "type": "module",
   "main": "./src/index.ts",
@@ -29,6 +29,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/logger"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/logger#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

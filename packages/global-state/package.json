@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/global-state",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Global State subsystem: derived platform status, admission, pending work, environment and tab identity.",
   "type": "module",
   "main": "./src/index.ts",
@@ -27,6 +27,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/global-state"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/global-state#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

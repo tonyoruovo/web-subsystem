@@ -139,7 +139,7 @@ export class CacheTransaction implements ICacheTransaction {
 
   /**
    * @summary Fixed at `'best-effort'` — CacheStorage provides no native transaction primitive and this implementation performs no WAL or crash recovery.
-   * @inheritdoc
+   * @inheritDoc
    */
   readonly strength: Extract<TransactionStrength, 'best-effort'> = 'best-effort';
 

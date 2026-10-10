@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/hub",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "Window scope: the hub page for the apex, the client every tab runs, and the window transport subsystem.",
   "type": "module",
   "main": "./src/index.ts",
@@ -29,6 +29,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/hub"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/hub#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

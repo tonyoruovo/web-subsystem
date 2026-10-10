@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/core",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The kernel of the platform: units, lifecycle, dependencies, state, views, packets and scopes.",
   "type": "module",
   "main": "./src/index.ts",
@@ -34,6 +34,18 @@
         "import": "./dist/processor/worker.js"
       },
       "./fixtures/*": "./fixtures/*"
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

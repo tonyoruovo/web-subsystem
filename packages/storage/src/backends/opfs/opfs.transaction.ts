@@ -168,7 +168,7 @@ export class OPFSTransaction implements IOPFSTransaction {
    * @summary The buffered operations, oldest first.
    * @returns The buffered operations, oldest first.
    */
-  get operations() {
+  get operations(): readonly WALOp[] {
     return this._ops as Readonly<WALOp[]>;
   }
 

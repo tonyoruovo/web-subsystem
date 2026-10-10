@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/sync",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Sync subsystem: an outbox of changes that reaches the server exactly once, pulls, conflicts, and offline replay.",
   "type": "module",
   "main": "./src/index.ts",
@@ -33,6 +33,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/sync"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/sync#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

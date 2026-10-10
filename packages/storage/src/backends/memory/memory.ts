@@ -1,4 +1,5 @@
 import type {
+  BackendKind,
   CanonicalKey,
   CapabilityResult,
   EvictionPolicy,
@@ -67,7 +68,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
    * @summary The kind of the backend: `memory`.
    * @returns The kind of the backend.
    */
-  get kind() {
+  get kind(): BackendKind {
     return this.store.kind;
   }
 
@@ -75,7 +76,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
    * @summary The strongest transaction of the backend: `best-effort`.
    * @returns The strongest transaction strength.
    */
-  get transactionStrength() {
+  get transactionStrength(): TransactionStrength {
     return this.store.transactionStrength;
   }
 
@@ -83,7 +84,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
    * @summary The place of the backend in the old priority order. A lower number comes first.
    * @returns The priority number.
    */
-  get priority() {
+  get priority(): number {
     return this.store.priority;
   }
 
@@ -383,7 +384,7 @@ export class MemoryBackend implements IStorageBackend<unknown> {
    * @param {string} [txId] The id of the transaction.
    * @returns {boolean} `true` when the transaction (or any transaction) is open.
    */
-  isTransactionActive(txId?: string) {
+  isTransactionActive(txId?: string): boolean {
     try {
       const tx = txId
         ? this._getTransaction(txId)

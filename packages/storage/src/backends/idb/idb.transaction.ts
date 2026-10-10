@@ -137,7 +137,7 @@ export class IDBTransaction implements IIDBTransaction {
 
   /**
    * @summary Always `'serializable'` — ops are applied inside a native IDB `readwrite` transaction at commit time.
-   * @inheritdoc
+   * @inheritDoc
    */
   readonly strength: Extract<TransactionStrength, 'serializable'> = 'serializable';
 

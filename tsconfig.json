@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "es2022",
     "moduleResolution": "bundler",
+    "rewriteRelativeImportExtensions": true,
     "allowImportingTsExtensions": true,
     "lib": ["ES2022", "DOM", "ESNext.Intl", "ESNext.Error"],
 

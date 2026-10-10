@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/network",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Network subsystem: requests with timeouts, retries, deduplication, a cache, a circuit breaker and interceptors.",
   "type": "module",
   "main": "./src/index.ts",
@@ -29,6 +29,18 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/network"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/network#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

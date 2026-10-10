@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/create",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The scaffolder of WebKrnl: npm init @webkrnl writes a Vue or plain TypeScript app.",
   "type": "module",
   "main": "./src/index.ts",
@@ -26,8 +26,20 @@
         "import": "./dist/index.js"
       }
     },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com",
     "bin": {
       "create-webkrnl": "./dist/cli.js"
     }
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/create"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/create#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

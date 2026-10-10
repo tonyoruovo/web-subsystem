@@ -1,0 +1,36 @@
+{
+  "source": {
+    "include": [
+      "packages/analytics/dist",
+      "packages/auth/dist",
+      "packages/consent/dist",
+      "packages/core/dist",
+      "packages/create/dist",
+      "packages/crypto/dist",
+      "packages/design-system/dist",
+      "packages/global-state/dist",
+      "packages/hub/dist",
+      "packages/logger/dist",
+      "packages/network/dist",
+      "packages/notification/dist",
+      "packages/platform/dist",
+      "packages/queue/dist",
+      "packages/realtime/dist",
+      "packages/settings/dist",
+      "packages/storage/dist",
+      "packages/sync/dist",
+      "packages/translation/dist",
+      "packages/vue/dist"
+    ],
+    "includePattern": "\\.js$"
+  },
+  "sourceType": "module",
+  "opts": {
+    "destination": "docs-site/jsdoc",
+    "recurse": true
+  },
+  "templates": {
+    "cleverLinks": false,
+    "monospaceLinks": false
+  }
+}

@@ -92,8 +92,8 @@ export class WorkerBudget {
    * @returns {WorkerBudget} The budget.
    */
   static forDevice(
-    maxWorkers = 4,
-    hardwareConcurrency = globalThis.navigator?.hardwareConcurrency ?? 2,
+    maxWorkers: number = 4,
+    hardwareConcurrency: number = globalThis.navigator?.hardwareConcurrency ?? 2,
   ): WorkerBudget {
     return new WorkerBudget(Math.min(Math.max(hardwareConcurrency - 1, 1), maxWorkers));
   }

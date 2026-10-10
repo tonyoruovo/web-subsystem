@@ -1,6 +1,6 @@
 {
   "name": "@webkrnl/crypto",
-  "version": "0.0.2",
+  "version": "0.1.0-rc.1",
   "description": "The Crypto subsystem: non-extractable keys that persist in IndexedDB, encryption, HMAC, signatures and digests, in a shared worker.",
   "type": "module",
   "main": "./src/index.ts",
@@ -32,6 +32,18 @@
         "types": "./dist/crypto.worker.d.ts",
         "import": "./dist/crypto.worker.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "author": "MathAid",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonyoruovo/WebKrnl.git",
+    "directory": "packages/crypto"
+  },
+  "homepage": "https://github.com/tonyoruovo/WebKrnl/tree/master/packages/crypto#readme",
+  "bugs": {
+    "url": "https://github.com/tonyoruovo/WebKrnl/issues"
   }
 }

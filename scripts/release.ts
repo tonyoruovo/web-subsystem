@@ -6,10 +6,15 @@
  * stays `0.0.2` until the alpha (docs/PLAN.md §4.1).
  *
  * ```text
- *   node scripts/release.ts sync           publishConfig and files from the workspace exports, in each package.json
- *   node scripts/release.ts check          one version; publishConfig in sync; dist/ built; npm pack has dist/ and no tests
+ *   node scripts/release.ts sync           publishConfig, files, repository/author/homepage/bugs, from the workspace, in each package.json
+ *   node scripts/release.ts check          one version; the above in sync; dist/ built; npm pack has dist/ and no tests
  *   node scripts/release.ts version 0.1.0  sets the version of every package
  *   ```
+ *
+ * `sync` also points `publishConfig.registry` at GitHub Packages
+ * (`npm.pkg.github.com`), since every package is scoped to this repo's
+ * owner. Nothing publishes there until a release is actually run
+ * (`pnpm -r publish`): this only prepares the config.
  *
  * @example
  * Before a release
@@ -22,14 +27,16 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const packagesDir = join(root, 'packages');
+const repoUrl = 'https://github.com/tonyoruovo/WebKrnl.git';
 
 type Manifest = Record<string, unknown> & {
   name: string;
   version: string;
+  author?: string;
   exports?: Record<string, string>;
   bin?: Record<string, string>;
   files?: string[];
@@ -56,6 +63,8 @@ function publishConfigOf(manifest: Manifest): Record<string, unknown> {
     main: toDist('./src/index.ts', '.js'),
     types: toDist('./src/index.ts', '.d.ts'),
     exports,
+    access: 'public',
+    registry: 'https://npm.pkg.github.com',
   };
   if (manifest.bin) {
     config.bin = Object.fromEntries(
@@ -68,6 +77,20 @@ function publishConfigOf(manifest: Manifest): Record<string, unknown> {
 const filesOf = (manifest: Manifest) =>
   (manifest.files ?? ['src']).map((entry) => (entry === 'src' ? 'dist' : entry));
 
+/** @summary The `repository`/`homepage`/`bugs` fields of a package, pointing at its own folder of this repo. */
+function metaOf(dir: string): {
+  repository: Record<string, string>;
+  homepage: string;
+  bugs: Record<string, string>;
+} {
+  const directory = `packages/${basename(dir)}`;
+  return {
+    repository: { type: 'git', url: repoUrl, directory },
+    homepage: `https://github.com/tonyoruovo/WebKrnl/tree/master/${directory}#readme`,
+    bugs: { url: 'https://github.com/tonyoruovo/WebKrnl/issues' },
+  };
+}
+
 const write = (path: string, manifest: Manifest) =>
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
 
@@ -78,9 +101,13 @@ if (command === 'sync') {
   for (const { path, manifest } of packages) {
     manifest.files = filesOf(manifest);
     manifest.publishConfig = publishConfigOf(manifest);
+    manifest.author ||= 'MathAid';
+    Object.assign(manifest, metaOf(join(path, '..')));
     write(path, manifest);
   }
-  console.log(`publishConfig and files written in ${packages.length} packages.`);
+  console.log(
+    `publishConfig, files and repository metadata written in ${packages.length} packages.`,
+  );
 } else if (command === 'version') {
   if (!argument || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(argument)) {
     throw new Error('Give a version, for example: node scripts/release.ts version 0.1.0');
@@ -101,6 +128,12 @@ if (command === 'sync') {
       problems.push(
         `${where}: publishConfig is not in sync with exports (run: node scripts/release.ts sync).`,
       );
+    }
+    if (JSON.stringify(manifest.repository) !== JSON.stringify(metaOf(dir).repository)) {
+      problems.push(`${where}: repository is not in sync (run: node scripts/release.ts sync).`);
+    }
+    if (!manifest.author) {
+      problems.push(`${where}: author is missing (run: node scripts/release.ts sync).`);
     }
     if (
       JSON.stringify(manifest.files) !== JSON.stringify(filesOf(manifest)) ||
